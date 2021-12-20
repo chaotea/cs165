@@ -27,7 +27,6 @@ RUN bash -c 'apt-get update && apt-get install -y \
     apt-utils \
     build-essential \
     gcc \
-    sse4.2-support \
     psmisc \
     python \
     python-pip \
@@ -35,9 +34,10 @@ RUN bash -c 'apt-get update && apt-get install -y \
     valgrind \
     strace \
     mutt'
+    # sse4.2-support
 
 #   python stat packages: scipy, pandas. dependencies for test generation
-RUN bash -c 'pip install scipy pandas'
+# RUN bash -c 'pip install scipy pandas'
 
 #   linux tools are for utilities such as `perf` for counters / performance measurement
 # enable linux-tools once MacOS linuxkit instruction support is patched and released

@@ -1,5 +1,18 @@
+# Project
+data
+*.data
 student_outputs
 generated_data
+status.current_container_id
+
+# Mac OS stuff
+*.DS_Store
+
+# IDE stuff
+tags
+Tags
+*.swp
+*.vscode
 
 # Object files
 obj/*
@@ -22,13 +35,3 @@ bin/*
 server
 client
 .deps
-
-#ide stuff
-tags
-Tags
-*.swp
-
-# other
-r*hs # vtune output
-.deps # makefile temps
-
