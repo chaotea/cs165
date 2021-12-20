@@ -4,7 +4,7 @@
 #include "hash_table.h"
 
 // This is where you can implement your own tests for the hash table
-// implementation. 
+// implementation.
 int main(void) {
 
   hashtable *ht = NULL;

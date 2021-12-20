@@ -27,7 +27,7 @@ int put(hashtable* ht, keyType key, valType value) {
 // stored in the values array to avoid a buffer overflow. The function returns
 // the number of matching entries using the num_results pointer. If the value of num_results is greater than
 // num_values, the caller can invoke this function again (with a larger buffer)
-// to get values that it missed during the first call. 
+// to get values that it missed during the first call.
 // This method returns an error code, 0 for success and -1 otherwise (e.g., if the hashtable is not allocated).
 int get(hashtable* ht, keyType key, valType *values, int num_values, int* num_results) {
     (void) ht;

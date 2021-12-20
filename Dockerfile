@@ -1,6 +1,6 @@
 ### Welcome to CS 165 Docker Procedure
 #   Most people should not have to change this too much.
-#   Should you need customization for development reasons, 
+#   Should you need customization for development reasons,
 #     see the Customization section of this Dockerfile near the bottom of the file.
 
 # declare parent image
@@ -35,7 +35,7 @@ RUN bash -c 'apt-get update && apt-get install -y \
     valgrind \
     strace \
     mutt'
-    
+
 #   python stat packages: scipy, pandas. dependencies for test generation
 RUN bash -c 'pip install scipy pandas'
 

@@ -5,9 +5,9 @@
 
 #include "hash_table.h"
 
-// This code is designed to test the correctness of your implementation. 
-// You do not need to significantly change it. 
-// Compile and run it in the command line by typing: 
+// This code is designed to test the correctness of your implementation.
+// You do not need to significantly change it.
+// Compile and run it in the command line by typing:
 // make test; ./test
 
 int main(void) {
@@ -43,7 +43,7 @@ int main(void) {
     if (results[0] != values[i]) {
       printf("Test failed with key %d. Got value %d. Expected value %d.\n", target_key, results[0], values[i]);
       return 1;
-    } 
+    }
   }
 
   printf("Passed tests for putting and getting.\n");
@@ -53,12 +53,12 @@ int main(void) {
     keyType target_key = keys[i];
     failure = erase(ht, target_key);
     assert(!failure);
-    failure = get(ht, target_key, results, num_values, &num_results);  
+    failure = get(ht, target_key, results, num_values, &num_results);
     assert(!failure);
     if (num_results != 0) {
       printf("Test failed with key %d. Expected it to be erased, but got %d matches.\n", target_key, num_results);
       return 1;
-    } 
+    }
   }
   failure = deallocate(ht);
   assert(!failure);

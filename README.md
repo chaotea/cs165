@@ -59,7 +59,7 @@ Add the original repo as remote to fetch (potential) future changes. Make sure y
 >`git remote set-url --push upstream DISABLE`
 
 
-You can list all your remotes with git remote -v. 
+You can list all your remotes with git remote -v.
 
 >`git remote -v`
 
@@ -85,16 +85,16 @@ When you push, do so on origin with git push origin.
 When you want to pull changes from upstream you can just fetch the remote and rebase on top of your work.
 
   >`git fetch upstream`
-  
+
   >`git rebase upstream/master`
 
 
 And solve the conflicts if any
 
 We will announce major patches during points in the semester.
-We anticipate that patches would mostly be if any updates, issues or ambiguities arise in test generation, 
-or infrastructure integration or changes to accomodate the automated testing of your code base in 
-the docker environment. Should you run into a git merge conflict, due to progress commits you have made, you may have to manually triage yourself. 
+We anticipate that patches would mostly be if any updates, issues or ambiguities arise in test generation,
+or infrastructure integration or changes to accomodate the automated testing of your code base in
+the docker environment. Should you run into a git merge conflict, due to progress commits you have made, you may have to manually triage yourself.
 For more on git merge conflict handling, see: https://help.github.com/en/articles/resolving-a-merge-conflict-using-the-command-line
 
 ## Understanding How the Docker Environment Works
@@ -104,14 +104,14 @@ the pieces of your C source and skeleton code integrate with Docker containers a
 
 Keep in mind that you are welcome to develop and debug your source code locally on your host machine.
 For integration and testing purposes the environment which you are evaluated on is a ubuntu docker container
-running on the following metal machine: 
+running on the following metal machine:
 a large state of the art server with sufficient main memory to hold the datasets you deal with.
 
 ## Client-Server code (inside `src/`)
-Special Note: 
+Special Note:
 The following is regarding the starter C code. The commands described below are relative to the `src`
 folder and its Makefile system, note this is not the top-level Makefile used for integration testing purposes.
-If you want to run this in your integration docker environment, 
+If you want to run this in your integration docker environment,
 you will need to start a docker container and attach an interactive shell into it, before you can do these commands.
 Of course, you are always welcome to do this in your host system during development time.
 If you are not sure what this means, please read the three files described in the section above about using Docker.
@@ -173,12 +173,12 @@ just `make`, you can run:
 > `make CFLAGS+="-DLOG -DLOG_ERR -DLOG_INFO"
 
 ## Generating your own tests (inside `project_tests/data_generation_scripts`)
-iIn the `project_tests/data_generation_scripts` directory we 
+iIn the `project_tests/data_generation_scripts` directory we
 have several python scripts that allow generation
 of test templates for base data CSVs, DSL query files, and EXP expected output files for a battery of tests
-separated by milestone number (1-5). 
-Note that these tests are cumulative by nature within each milestone. 
-So for instance, M1 covers tests 01-09 and builds on each other 
+separated by milestone number (1-5).
+Note that these tests are cumulative by nature within each milestone.
+So for instance, M1 covers tests 01-09 and builds on each other
 (a test may modify data loaded/inserted by an earlier test within the same milestone number).
 
 Read `project_tests/data_generation_scripts/README.md` for more details on how to generate and store a copy of tests locally.

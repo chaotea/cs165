@@ -35,7 +35,7 @@ int main(void) {
   }
 
   gettimeofday(&stop, NULL);
-  double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+  double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
   printf("50 million insertions took %f seconds\n", secs);
 
   failure = deallocate(ht);

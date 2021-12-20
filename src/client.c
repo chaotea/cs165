@@ -65,7 +65,7 @@ int connect_client() {
  * Getting Started Hint:
  *      What kind of protocol or structure will you use to deliver your results from the server to the client?
  *      What kind of protocol or structure will you use to interpret results for final display to the user?
- *      
+ *
 **/
 int main(void)
 {
