@@ -57,4 +57,6 @@ void log_err(const char *format, ...);
 // Usage: log_info("Command received: %s", command_string);
 void log_info(const char *format, ...);
 
+void log_test(const char *format, ...);
+
 #endif /* __UTILS_H__ */

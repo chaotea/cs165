@@ -33,42 +33,65 @@
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
- * 
- * Getting started hints: 
+ *
+ * Getting started hints:
  *      What are the structural attributes of a `query`?
  *      How will you interpret different queries?
  *      How will you ensure different queries invoke different execution paths in your code?
  **/
 char* execute_DbOperator(DbOperator* query) {
     // there is a small memory leak here (when combined with other parts of your database.)
-    // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak. 
-    if(!query)
-    {
-        return "165";
-    }
-    if(query && query->type == CREATE){
-        if(query->operator_fields.create_operator.create_type == _DB){
-            if (create_db(query->operator_fields.create_operator.name).code == OK) {
-                return "165";
-            } else {
-                return "Failed";
+    // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak.
+    char* result = NULL;
+    Status status;
+
+    if (!query) {
+        log_err("No query\n");
+    } else if (query->type == CREATE) {
+        if(query->operator_fields.create_operator.create_type == _DB) {
+            if (create_db(query->operator_fields.create_operator.name).code != OK) {
+                log_err("Create db failed\n");
             }
-        }
-        else if(query->operator_fields.create_operator.create_type == _TABLE){
-            Status create_status;
-            create_table(query->operator_fields.create_operator.db, 
-                query->operator_fields.create_operator.name, 
-                query->operator_fields.create_operator.col_count, 
-                &create_status);
-            if (create_status.code != OK) {
-                cs165_log(stdout, "adding a table failed.");
-                return "Failed";
+            log_test("Create db succeeded\n");
+        } else if (query->operator_fields.create_operator.create_type == _TABLE) {
+            create_table(query->operator_fields.create_operator.db,
+                query->operator_fields.create_operator.name,
+                query->operator_fields.create_operator.col_count,
+                &status);
+            if (status.code != OK) {
+                log_err("Create table failed\n");
             }
-            return "165";
+            log_test("Create table succeeded\n");
+        } else if (query->operator_fields.create_operator.create_type == _COLUMN){
+            create_column(query->operator_fields.create_operator.table,
+                query->operator_fields.create_operator.name,
+                false,
+                &status);
+            if (status.code != OK) {
+                log_err("Create column failed\n");
+            }
+            log_test("Create column succeeded\n");
         }
+    } else if (query->type == LOAD) {
+        if (load_table(query->operator_fields.load_operator.file_name).code != OK) {
+            log_err("Load failed\n");
+        }
+        log_test("Load succeeded\n");
+    } else if (query->type == INSERT) {
+        if (relational_insert(query->operator_fields.insert_operator.table, query->operator_fields.insert_operator.values).code != OK) {
+            log_err("Insert failed\n");
+        }
+        log_test("Insert succeeded\n");
+    } else if (query->type == SHUTDOWN) {
+        if (shutdown_server().code != OK) {
+            log_err("Shutdown failed\n");
+        }
+        log_test("Shutdown succeeded\n");
+    } else {
+        log_err("Unknown query\n");
     }
     free(query);
-    return "165";
+    return result;
 }
 
 /**
@@ -96,7 +119,7 @@ void handle_client(int client_socket) {
     // 4. Send response to the request.
     do {
         length = recv(client_socket, &recv_message, sizeof(message), 0);
-        if (length < 0) {
+        if (length < 0)  {
             log_err("Client connection closed!\n");
             exit(1);
         } else if (length == 0) {
@@ -105,7 +128,7 @@ void handle_client(int client_socket) {
 
         if (!done) {
             char recv_buffer[recv_message.length + 1];
-            length = recv(client_socket, recv_buffer, recv_message.length,0);
+            length = recv(client_socket, recv_buffer, recv_message.length, 0);
             recv_message.payload = recv_buffer;
             recv_message.payload[recv_message.length] = '\0';
 
@@ -115,23 +138,48 @@ void handle_client(int client_socket) {
 
             // 2. Handle request
             //    Corresponding database operator is executed over the query
-            char* result = execute_DbOperator(query);
+            char* result = NULL;
+            if (query) {
+                result = execute_DbOperator(query);
+                if (result) {
+                    send_message.length = strlen(result);
+                    char send_buffer[send_message.length + 1];
+                    strcpy(send_buffer, result);
+                    send_message.payload = send_buffer;
+                    send_message.status = OK_WAIT_FOR_RESPONSE;
+                } else {
+                    send_message.length = 0;
+                    send_message.payload = NULL;
+                    send_message.status = OK_DONE;
+                }
+            } else if (send_message.status == OK_DONE) {
+                send_message.length = 0;
+                send_message.payload = NULL;
+            } else if (send_message.status == UNKNOWN_COMMAND) {
+                send_message.length = 0;
+                send_message.payload = NULL;
+                log_err("Unknown command\n");
+            } else if (send_message.status == QUERY_UNSUPPORTED) {
+                send_message.length = 0;
+                send_message.payload = NULL;
+                log_err("Query unsupported\n");
+            } else {
+                send_message.length = 0;
+                send_message.payload = NULL;
+                log_err("Error parsing message\n");
+            }
 
-            send_message.length = strlen(result);
-            char send_buffer[send_message.length + 1];
-            strcpy(send_buffer, result);
-            send_message.payload = send_buffer;
-            send_message.status = OK_WAIT_FOR_RESPONSE;
-            
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
-            if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
-                log_err("Failed to send message.");
+            if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
+                log_err("Server failed to send message status\n");
                 exit(1);
             }
 
             // 4. Send response to the request
-            if (send(client_socket, result, send_message.length, 0) == -1) {
-                log_err("Failed to send message.");
+            if (result && send(client_socket, result, send_message.length, 0) == -1) {
+                log_err("Triggered by %s\n", recv_message.payload);
+                log_err("Result: %s\n", result);
+                log_err("Server failed to send message body\n");
                 exit(1);
             }
         }
@@ -190,9 +238,9 @@ int setup_server() {
 // After handling the client, it will exit.
 // You WILL need to extend this to handle MULTIPLE concurrent clients
 // and remain running until it receives a shut-down command.
-// 
+//
 // Getting Started Hints:
-//      How will you extend main to handle multiple concurrent clients? 
+//      How will you extend main to handle multiple concurrent clients?
 //      Is there a maximum number of concurrent client connections you will allow?
 //      What aspects of siloes or isolation are maintained in your design? (Think `what` is shared between `whom`?)
 int main(void)

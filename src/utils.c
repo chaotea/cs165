@@ -7,6 +7,7 @@
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
 #define LOG 1
@@ -16,7 +17,7 @@
 /* removes newline characters from the input string.
  * Shifts characters over and shortens the length of
  * the string by the number of newline characters.
- */ 
+ */
 char* trim_newline(char *str) {
     int length = strlen(str);
     int current = 0;
@@ -33,7 +34,7 @@ char* trim_newline(char *str) {
 /* removes space characters from the input string.
  * Shifts characters over and shortens the length of
  * the string by the number of space characters.
- */ 
+ */
 char* trim_whitespace(char *str)
 {
     int length = strlen(str);
@@ -52,7 +53,7 @@ char* trim_whitespace(char *str)
 /* removes parenthesis characters from the input string.
  * Shifts characters over and shortens the length of
  * the string by the number of parenthesis characters.
- */ 
+ */
 char* trim_parenthesis(char *str) {
     int length = strlen(str);
     int current = 0;
@@ -125,4 +126,16 @@ void log_info(const char *format, ...) {
 #endif
 }
 
-
+void log_test(const char *format, ...) {
+#ifdef LOG_TEST
+    va_list v;
+    va_start(v, format);
+    fprintf(stderr, ANSI_COLOR_CYAN);
+    vfprintf(stderr, format, v);
+    fprintf(stderr, ANSI_COLOR_RESET);
+    fflush(stderr);
+    va_end(v);
+#else
+    (void) format;
+#endif
+}

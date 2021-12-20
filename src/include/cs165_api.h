@@ -28,10 +28,13 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 // Limits the size of a name in our database to 64 characters
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
+#define BUF_SIZE 1024
+#define DEFAULT_COL_SIZE 1024
 
 /**
  * EXTRA
@@ -52,9 +55,9 @@ struct Comparator;
 //struct ColumnIndex;
 
 typedef struct Column {
-    char name[MAX_SIZE_NAME]; 
+    char name[MAX_SIZE_NAME];
     int* data;
-    // You will implement column indexes later. 
+    // You will implement column indexes later.
     void* index;
     //struct ColumnIndex *index;
     //bool clustered;
@@ -77,9 +80,11 @@ typedef struct Column {
 
 typedef struct Table {
     char name [MAX_SIZE_NAME];
-    Column *columns;
+    Column** columns;
     size_t col_count;
+    size_t col_idx;
     size_t table_length;
+    size_t table_capacity;
 } Table;
 
 /**
@@ -92,8 +97,8 @@ typedef struct Table {
  **/
 
 typedef struct Db {
-    char name[MAX_SIZE_NAME]; 
-    Table *tables;
+    char name[MAX_SIZE_NAME];
+    Table** tables;
     size_t tables_size;
     size_t tables_capacity;
 } Db;
@@ -125,7 +130,7 @@ typedef enum ComparatorType {
 } ComparatorType;
 
 /*
- * Declares the type of a result column, 
+ * Declares the type of a result column,
  which includes the number of tuples in the result, the data type of the result, and a pointer to the result data
  */
 typedef struct Result {
@@ -176,11 +181,11 @@ typedef struct ClientContext {
 
 /**
  * comparator
- * A comparator defines a comparison operation over a column. 
+ * A comparator defines a comparison operation over a column.
  **/
 typedef struct Comparator {
     long int p_low; // used in equality and ranges.
-    long int p_high; // used in range compares. 
+    long int p_high; // used in range compares.
     GeneralizedColumn* gen_col;
     ComparatorType type1;
     ComparatorType type2;
@@ -194,6 +199,7 @@ typedef enum OperatorType {
     CREATE,
     INSERT,
     LOAD,
+    SHUTDOWN
 } OperatorType;
 
 
@@ -205,17 +211,18 @@ typedef enum CreateType {
 
 /*
  * necessary fields for creation
- * "create_type" indicates what kind of object you are creating. 
- * For example, if create_type == _DB, the operator should create a db named <<name>> 
+ * "create_type" indicates what kind of object you are creating.
+ * For example, if create_type == _DB, the operator should create a db named <<name>>
  * if create_type = _TABLE, the operator should create a table named <<name>> with <<col_count>> columns within db <<db>>
  * if create_type = = _COLUMN, the operator should create a column named <<name>> within table <<table>>
  */
 typedef struct CreateOperator {
-    CreateType create_type; 
-    char name[MAX_SIZE_NAME]; 
+    CreateType create_type;
+    char name[MAX_SIZE_NAME];
     Db* db;
     Table* table;
     int col_count;
+    int sorted;
 } CreateOperator;
 
 /*
@@ -255,21 +262,26 @@ typedef struct DbOperator {
 
 extern Db *current_db;
 
-/* 
+/*
  * Use this command to see if databases that were persisted start up properly. If files
- * don't load as expected, this can return an error. 
+ * don't load as expected, this can return an error.
  */
 Status db_startup();
 
 Status create_db(const char* db_name);
 
-Table* create_table(Db* db, const char* name, size_t num_columns, Status *status);
+Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_status);
 
-Column* create_column(Table *table, char *name, bool sorted, Status *ret_status);
+Column* create_column(Table* table, char* name, int sorted, Status* ret_status);
+
+Status relational_insert(Table* table, int* values);
+
+Status load_table(const char* file_name);
 
 Status shutdown_server();
 
 char** execute_db_operator(DbOperator* query);
+
 void db_operator_free(DbOperator* query);
 
 
