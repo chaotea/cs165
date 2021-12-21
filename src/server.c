@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "common.h"
 #include "parse.h"
@@ -83,7 +84,7 @@ char* execute_DbOperator(DbOperator* query) {
         }
         log_test("Insert succeeded\n");
     } else if (query->type == SHUTDOWN) {
-        if (shutdown_server().code != OK) {
+        if (shutdown_database().code != OK) {
             log_err("Shutdown failed\n");
         }
         log_test("Shutdown succeeded\n");
@@ -243,8 +244,13 @@ int setup_server() {
 //      How will you extend main to handle multiple concurrent clients?
 //      Is there a maximum number of concurrent client connections you will allow?
 //      What aspects of siloes or isolation are maintained in your design? (Think `what` is shared between `whom`?)
-int main(void)
-{
+
+int main(void) {
+    struct stat st;
+	if (stat(MAINDIR, &st) != -1) {
+		load_database();
+	}
+
     int server_socket = setup_server();
     if (server_socket < 0) {
         exit(1);

@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include "cs165_api.h"
 #include "utils.h"
+#include <errno.h>
 
 
 // In this class, there will always be only one active database at a time
@@ -138,10 +139,9 @@ Status relational_insert(Table* table, int* values) {
 Status load_table(const char* file_name) {
 	Status ret_status;
 
-	log_test("Loading database from file %s\n", file_name);
+	log_test("Loading table from file %s\n", file_name);
 
 	FILE* fp;
-
 	fp = fopen(file_name, "r");
 	if (!fp) {
 		log_err("Unable to open file\n");
@@ -224,7 +224,125 @@ Status load_table(const char* file_name) {
 	return ret_status;
 }
 
-Status shutdown_server() {
+
+Status load_database() {
+	Status ret_status;
+
+	FILE* fp;
+	char meta_path[strlen(MAINDIR) + strlen(METADATA_FILE_NAME) + 2];
+	sprintf(meta_path, "%s/%s", MAINDIR, METADATA_FILE_NAME);
+
+	fp = fopen(meta_path, "r");
+	if (!fp) {
+		log_err("Unable to open file\n");
+		ret_status.code = ERROR;
+		return ret_status;
+	}
+
+	char buf[BUF_SIZE];
+	if (fgets(buf, BUF_SIZE, fp) == NULL) {
+		log_err("Empty file\n");
+		fclose(fp);
+		ret_status.code = ERROR;
+		return ret_status;
+	}
+
+	char* line = buf;
+	char* db_name = strsep(&line, ",");
+	char* table_count = strsep(&line, ",");
+	int num_tables = atoi(table_count);
+
+	if (create_db(db_name).code != OK) {
+		log_err("Couldn't create db");
+		fclose(fp);
+		ret_status.code = ERROR;
+		return ret_status;
+	}
+
+	for (int i = 0; i < num_tables; i++) {
+		fgets(buf, BUF_SIZE, fp);
+		line = buf;
+		char* table_name = strsep(&line, ",");
+		char* column_count = strsep(&line, ",");
+		char* table_length = strsep(&line, ",");
+		int num_columns = atoi(column_count);
+		int length = atoi(table_length);
+
+		Status rstatus;
+		Table* table = create_table(current_db, table_name, num_columns, &rstatus);
+		if (rstatus.code != OK) {
+			log_err("Couldn't create table");
+			fclose(fp);
+			ret_status.code = ERROR;
+			return ret_status;
+		}
+		table->table_length = length;
+
+		for (int j = 0; j < num_columns; j++) {
+			fgets(buf, BUF_SIZE, fp);
+			line = buf;
+			int last_char = strlen(line) - 1;
+			line[last_char] = '\0';
+			Column* column = create_column(table, line, 0, &rstatus);
+			if (rstatus.code != OK) {
+				log_err("Couldn't create column");
+				fclose(fp);
+				ret_status.code = ERROR;
+				return ret_status;
+			}
+			column->data = realloc(column->data, table->table_length * sizeof(int));
+
+			// Set the path name
+			char path[MAX_SIZE_NAME * 3 + strlen(MAINDIR) + 8];
+			sprintf(path, "%s/%s.%s.data", MAINDIR, table->name, column->name);
+
+			// Open the persistence file
+			int fd;
+			fd = open(path, O_RDWR, 0600);
+			if (fd < 0) {
+				log_err("Opening persistence file\n");
+				fclose(fp);
+				ret_status.code = ERROR;
+    			return ret_status;
+			}
+
+			// Map the contents of the file to memory
+			int* data = (int*) mmap(0, table->table_length * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+			if (data == MAP_FAILED) {
+				close(fd);
+				fclose(fp);
+				log_err("Mmapping file failed\n");
+				ret_status.code = ERROR;
+    			return ret_status;
+			}
+
+			// Write data from file to column
+			for (size_t i = 0; i < table->table_length; i++) {
+				column->data[i] = data[i];
+			}
+
+			// Unmap the file and close the file descriptor
+			if (munmap(data, table->table_length * sizeof(int)) == -1) {
+				close(fd);
+				fclose(fp);
+				log_err("Munmap file failed\n");
+				ret_status.code = ERROR;
+    			return ret_status;
+			}
+
+			close(fd);
+		}
+	}
+
+	fclose(fp);
+
+	log_test("Loading database from storage succeeded\n");
+	ret_status.code = OK;
+	return ret_status;
+}
+
+
+Status shutdown_database() {
     Status ret_status;
 
 	// If no db currently active, return OK
@@ -234,11 +352,32 @@ Status shutdown_server() {
 	}
 
 	// Create new directory for database
-	// if (mkdir("data", 0600) == -1) {
-	// 	log_err("Creating main directory failed\n");
-	// 	ret_status.code = ERROR;
-	// 	return ret_status;
-	// }
+	struct stat st;
+	if (stat(MAINDIR, &st) == -1) {
+		mkdir(MAINDIR, 0700);
+	}
+
+	// Construct metadata file
+	FILE* fp;
+	char meta_path[strlen(MAINDIR) + strlen(METADATA_FILE_NAME) + 2];
+	sprintf(meta_path, "%s/%s", MAINDIR, METADATA_FILE_NAME);
+	fp = fopen(meta_path, "w");
+	if (!fp) {
+		log_err("Unable to create metadata file\n");
+		ret_status.code = ERROR;
+		return ret_status;
+	}
+	fprintf(fp, "%s,%zu\n", current_db->name, current_db->tables_size);
+	for (size_t tbl = 0; tbl < current_db->tables_size; tbl++) {
+		Table* table = current_db->tables[tbl];
+		fprintf(fp, "%s,%zu,%zu\n", table->name, table->col_count, table->table_length);
+		for (size_t col = 0; col < table->col_count; col++) {
+			Column* column = table->columns[col];
+			fprintf(fp, "%s\n", column->name);
+		}
+	}
+	fclose(fp);
+
 
 	// Loop through the tables in the db
 	for (size_t tbl = 0; tbl < current_db->tables_size; tbl++) {
@@ -249,9 +388,10 @@ Status shutdown_server() {
 			Column* column = table->columns[col];
 
 			// Set the path name
-			char path[MAX_SIZE_NAME * 3 + 16];
-			// sprintf(path, "../data/%s.%s.%s.data", current_db->name, table->name, column->name);
-			sprintf(path, "%s.%s.%s.data", current_db->name, table->name, column->name);
+			char path[MAX_SIZE_NAME * 2 + strlen(MAINDIR) + 8];
+			sprintf(path, "%s/%s.%s.data", MAINDIR, table->name, column->name);
+			// char path[MAX_SIZE_NAME * 3 + 16];
+			// sprintf(path, "%s.%s.%s.data", current_db->name, table->name, column->name);
 
 			// Open/create the file
 			int fd;

@@ -36,6 +36,9 @@ SOFTWARE.
 #define BUF_SIZE 1024
 #define DEFAULT_COL_SIZE 1024
 
+#define MAINDIR "./data"
+#define METADATA_FILE_NAME "meta.data"
+
 /**
  * EXTRA
  * DataType
@@ -129,6 +132,12 @@ typedef enum ComparatorType {
     GREATER_THAN_OR_EQUAL = 6
 } ComparatorType;
 
+typedef struct PositionList {
+    size_t list_size;
+    size_t list_capacity;
+    int* positions;
+} PositionList;
+
 /*
  * Declares the type of a result column,
  which includes the number of tuples in the result, the data type of the result, and a pointer to the result data
@@ -199,6 +208,8 @@ typedef enum OperatorType {
     CREATE,
     INSERT,
     LOAD,
+    SELECT,
+    FETCH,
     SHUTDOWN
 } OperatorType;
 
@@ -238,6 +249,18 @@ typedef struct InsertOperator {
 typedef struct LoadOperator {
     char* file_name;
 } LoadOperator;
+
+typedef struct SelectOperator {
+    Column* column;
+    int lower;
+    int higher;
+} SelectOperator;
+
+typedef struct FetchOperator {
+    Column* column;
+    PositionList pos_list;
+} FetchOperator;
+
 /*
  * union type holding the fields of any operator
  */
@@ -245,6 +268,8 @@ typedef union OperatorFields {
     CreateOperator create_operator;
     InsertOperator insert_operator;
     LoadOperator load_operator;
+    SelectOperator select_operator;
+    FetchOperator fetch_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
@@ -278,7 +303,9 @@ Status relational_insert(Table* table, int* values);
 
 Status load_table(const char* file_name);
 
-Status shutdown_server();
+Status load_database();
+
+Status shutdown_database();
 
 char** execute_db_operator(DbOperator* query);
 

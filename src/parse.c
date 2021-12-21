@@ -358,6 +358,71 @@ DbOperator* parse_load(char* load_arguments, message* send_message) {
     }
 }
 
+
+// /**
+//  * parse_select
+//  **/
+
+// DbOperator* parse_select(char* select_arguments, message* send_message) {
+//     if (strncmp(select_arguments, "(", 1) == 0) {
+//         select_arguments++;
+//         char** select_arguments_index = &select_arguments;
+//         char* column_name = next_token(select_arguments_index, &send_message->status);
+//         char* lower_bound = next_token(select_arguments_index, &send_message->status);
+//         char* upper_bound = next_token(select_arguments_index, &send_message->status);
+
+//         // Incorrect number of arguments
+//         if (send_message->status == INCORRECT_FORMAT) {
+//             log_err("Incorrect number of arguments\n");
+//             return NULL;
+//         }
+
+//         // Lookup the column
+//         Column* column = lookup_column(column_name);
+//         if (column == NULL) {
+//             send_message->status = OBJECT_NOT_FOUND;
+//             return NULL;
+//         }
+
+//         // Read and chop off last char, which should be a ')'
+//         int last_char = strlen(upper_bound) - 1;
+//         if (upper_bound[last_char] != ')') {
+//             log_err("Missing ')' in query\n");
+//             send_message->status = INCORRECT_FORMAT;
+//             return NULL;
+//         }
+
+//         // Replace the ')' with a null terminating character
+//         upper_bound[last_char] = '\0';
+
+//         // Turn the bounds into integers
+//         int lower = atoi(lower_bound);
+//         int higher = atoi(upper_bound);
+
+//         // Make create dbo for table
+//         DbOperator* dbo = malloc(sizeof(DbOperator));
+//         dbo->type = SELECT;
+//         dbo->operator_fields.select_operator.column = column;
+//         dbo->operator_fields.select_operator.lower = lower;
+//         dbo->operator_fields.select_operator.higher = higher;
+//         return dbo;
+//     } else {
+//         log_err("Missing '(' in query\n");
+//         send_message->status = INCORRECT_FORMAT;
+//         return NULL;
+//     }
+// }
+
+
+// /**
+//  * parse_fetch
+//  **/
+
+// DbOperator* parse_fetch(char* fetch_arguments, message* send_message) {
+//     return NULL;
+// }
+
+
 /**
  * parse_command takes as input the send_message from the client and then
  * parses it into the appropriate query. Stores into send_message the
@@ -369,6 +434,7 @@ DbOperator* parse_load(char* load_arguments, message* send_message) {
  *      How would you add a new command type to parse?
  *      What if such command requires multiple arguments?
  **/
+
 DbOperator* parse_command(char* query_command, message* send_message, int client_socket, ClientContext* context) {
     // a second option is to malloc the dbo here (instead of inside the parse commands). Either way, you should track the dbo
     // and free it when the variable is no longer needed.
@@ -408,6 +474,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "load", 4) == 0) {
         query_command += 4;
         dbo = parse_load(query_command, send_message);
+    // } else if (strncmp(query_command, "select", 6) == 0) {
+    //     query_command += 6;
+    //     dbo = parse_select(query_command, send_message);
+    // } else if (strncmp(query_command, "fetch", 5) == 0) {
+    //     query_command += 5;
+    //     dbo = parse_fetch(query_command, send_message);
     } else if (strncmp(query_command, "shutdown", 8) == 0) {
         DbOperator* dbo = malloc(sizeof(DbOperator));
         dbo->type = SHUTDOWN;

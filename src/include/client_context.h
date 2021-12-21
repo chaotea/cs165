@@ -3,6 +3,8 @@
 
 #include "cs165_api.h"
 
-Table* lookup_table(char *name);
+Table* lookup_table(char* name);
+
+Column* lookup_column(char* name);
 
 #endif
