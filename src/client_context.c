@@ -78,3 +78,24 @@ Column* lookup_column(char* name) {
 * 		What other entities are context related (and contextual with respect to what scope in your design)?
 * 		What else will you define in this file?
 **/
+
+GeneralizedColumnHandle* lookup_handle(ClientContext* context, char* name) {
+    for (int i = 0; i < context->chandles_in_use; i++) {
+        if (strcmp(context->chandle_table[i].name, name) == 0) {
+            return &context->chandle_table[i];
+        }
+    }
+    return NULL;
+}
+
+GeneralizedColumnHandle* create_handle(ClientContext* context, char* name) {
+    if (context->chandles_in_use == context->chandle_slots) {
+        context->chandle_slots = context->chandle_slots * 2;
+        context->chandle_table = realloc(context->chandle_table, context->chandle_slots * sizeof(GeneralizedColumnHandle));
+    }
+
+    GeneralizedColumnHandle* handle = &context->chandle_table[context->chandles_in_use];
+    context->chandles_in_use++;
+    strcpy(handle->name, name);
+    return handle;
+}

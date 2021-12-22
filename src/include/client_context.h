@@ -7,4 +7,8 @@ Table* lookup_table(char* name);
 
 Column* lookup_column(char* name);
 
+GeneralizedColumnHandle* lookup_handle(ClientContext* context, char* name);
+
+GeneralizedColumnHandle* create_handle(ClientContext* context, char* name);
+
 #endif

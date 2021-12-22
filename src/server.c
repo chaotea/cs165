@@ -30,6 +30,7 @@
 #include "client_context.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
+#define DEFAULT_CONTEXT_HANDLES 32
 
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
@@ -43,7 +44,7 @@
 char* execute_DbOperator(DbOperator* query) {
     // there is a small memory leak here (when combined with other parts of your database.)
     // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak.
-    char* result = NULL;
+    char* response = NULL;
     Status status;
 
     if (!query) {
@@ -83,16 +84,43 @@ char* execute_DbOperator(DbOperator* query) {
             log_err("Insert failed\n");
         }
         log_test("Insert succeeded\n");
+    } else if (query->type == SELECT) {
+        Result* indexes = select_column(query->operator_fields.select_operator.column,
+            query->operator_fields.select_operator.lower,
+            query->operator_fields.select_operator.upper,
+            &status);
+        if (status.code != OK) {
+            log_err("Select failed\n");
+        }
+        query->operator_fields.select_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
+        log_test("Select succeeded\n");
+    } else if (query->type == FETCH) {
+        Result* result = fetch(query->operator_fields.fetch_operator.column,
+            query->operator_fields.fetch_operator.positions,
+            &status);
+        if (status.code != OK) {
+            log_err("Fetch failed\n");
+        }
+        query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
+        log_test("Fetch succeeded\n");
+    } else if (query->type == PRINT) {
+        response = print_result(query->operator_fields.print_operator.result, &status);
+        if (status.code != OK) {
+            log_err("Print failed\n");
+        }
+        log_test("Print succeeded\n");
     } else if (query->type == SHUTDOWN) {
-        if (shutdown_database().code != OK) {
+        if (db_shutdown().code != OK) {
             log_err("Shutdown failed\n");
         }
         log_test("Shutdown succeeded\n");
     } else {
-        log_err("Unknown query\n");
+        log_err("Unknown query while executing\n");
     }
     free(query);
-    return result;
+    return response;
 }
 
 /**
@@ -111,7 +139,10 @@ void handle_client(int client_socket) {
     message recv_message;
 
     // create the client context here
-    ClientContext* client_context = NULL;
+    ClientContext* client_context = malloc(sizeof(ClientContext));
+    client_context->chandle_table = calloc(DEFAULT_CONTEXT_HANDLES, sizeof(GeneralizedColumnHandle));
+    client_context->chandle_slots = DEFAULT_CONTEXT_HANDLES;
+    client_context->chandles_in_use = 0;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
@@ -139,13 +170,13 @@ void handle_client(int client_socket) {
 
             // 2. Handle request
             //    Corresponding database operator is executed over the query
-            char* result = NULL;
+            char* response = NULL;
             if (query) {
-                result = execute_DbOperator(query);
-                if (result) {
-                    send_message.length = strlen(result);
+                response = execute_DbOperator(query);
+                if (response) {
+                    send_message.length = strlen(response);
                     char send_buffer[send_message.length + 1];
-                    strcpy(send_buffer, result);
+                    strcpy(send_buffer, response);
                     send_message.payload = send_buffer;
                     send_message.status = OK_WAIT_FOR_RESPONSE;
                 } else {
@@ -177,14 +208,15 @@ void handle_client(int client_socket) {
             }
 
             // 4. Send response to the request
-            if (result && send(client_socket, result, send_message.length, 0) == -1) {
-                log_err("Triggered by %s\n", recv_message.payload);
-                log_err("Result: %s\n", result);
+            if (response && send(client_socket, response, send_message.length, 0) == -1) {
                 log_err("Server failed to send message body\n");
                 exit(1);
             }
         }
     } while (!done);
+
+    free(client_context->chandle_table);
+    free(client_context);
 
     log_info("Connection closed at socket %d!\n", client_socket);
     close(client_socket);
@@ -246,9 +278,12 @@ int setup_server() {
 //      What aspects of siloes or isolation are maintained in your design? (Think `what` is shared between `whom`?)
 
 int main(void) {
+    // Load database from storage
     struct stat st;
 	if (stat(MAINDIR, &st) != -1) {
-		load_database();
+		if (db_startup().code == OK) {
+            log_test("-- Loading database from storage succeeded\n");
+        }
 	}
 
     int server_socket = setup_server();

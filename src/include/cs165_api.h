@@ -49,12 +49,13 @@ SOFTWARE.
  **/
 
 typedef enum DataType {
-     INT,
-     LONG,
-     FLOAT
+    INDEX,
+    INT,
+    LONG,
+    FLOAT
 } DataType;
 
-struct Comparator;
+// struct Comparator;
 //struct ColumnIndex;
 
 typedef struct Column {
@@ -64,6 +65,7 @@ typedef struct Column {
     void* index;
     //struct ColumnIndex *index;
     //bool clustered;
+    size_t length;
 } Column;
 
 
@@ -132,18 +134,13 @@ typedef enum ComparatorType {
     GREATER_THAN_OR_EQUAL = 6
 } ComparatorType;
 
-typedef struct PositionList {
-    size_t list_size;
-    size_t list_capacity;
-    int* positions;
-} PositionList;
-
 /*
  * Declares the type of a result column,
  which includes the number of tuples in the result, the data type of the result, and a pointer to the result data
  */
 typedef struct Result {
     size_t num_tuples;
+    size_t capacity;
     DataType data_type;
     void *payload;
 } Result;
@@ -210,6 +207,7 @@ typedef enum OperatorType {
     LOAD,
     SELECT,
     FETCH,
+    PRINT,
     SHUTDOWN
 } OperatorType;
 
@@ -252,14 +250,20 @@ typedef struct LoadOperator {
 
 typedef struct SelectOperator {
     Column* column;
+    GeneralizedColumnHandle* handle;
     int lower;
-    int higher;
+    int upper;
 } SelectOperator;
 
 typedef struct FetchOperator {
     Column* column;
-    PositionList pos_list;
+    Result* positions;
+    GeneralizedColumnHandle* handle;
 } FetchOperator;
+
+typedef struct PrintOperator {
+    Result* result;
+} PrintOperator;
 
 /*
  * union type holding the fields of any operator
@@ -270,6 +274,7 @@ typedef union OperatorFields {
     LoadOperator load_operator;
     SelectOperator select_operator;
     FetchOperator fetch_operator;
+    PrintOperator print_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
@@ -301,11 +306,15 @@ Column* create_column(Table* table, char* name, int sorted, Status* ret_status);
 
 Status relational_insert(Table* table, int* values);
 
+Result* select_column(Column* column, int lower, int upper, Status* ret_status);
+
+Result* fetch(Column* column, Result* positions, Status* ret_status);
+
+char* print_result(Result* result, Status* ret_status);
+
 Status load_table(const char* file_name);
 
-Status load_database();
-
-Status shutdown_database();
+Status db_shutdown();
 
 char** execute_db_operator(DbOperator* query);
 

@@ -41,13 +41,13 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_st
 
 	// Add the table and adjust the size of the db
 	// tables_size acts as the index
-	Table* table = calloc(1, sizeof(Table));
+	Table* table = malloc(sizeof(Table));
 	db->tables[db->tables_size] = table;
 	db->tables_size++;
 
 	// Initialize the table fields
 	strcpy(table->name, name);
-	table->name[strlen(name)] = '\0';
+	// table->name[strlen(name)] = '\0';
 	table->columns = calloc(num_columns, sizeof(Column));
 	table->col_count = num_columns;
 	table->col_idx = 0;
@@ -71,7 +71,7 @@ Status create_db(const char* db_name) {
 		return ret_status;
 	}
 
-	current_db = calloc(1, sizeof(Db));
+	current_db = malloc(sizeof(Db));
 	strcpy(current_db->name, db_name);
 	current_db->tables = NULL;
 	current_db->tables_size = 0;
@@ -95,15 +95,16 @@ Column* create_column(Table* table, char* name, int sorted, Status* ret_status) 
 	}
 
 	// Add the column
-	Column* column = calloc(1, sizeof(Column));
+	Column* column = malloc(sizeof(Column));
 	table->columns[table->col_idx] = column;
 	table->col_idx++;
 
 	// Initialize column fields
 	strcpy(column->name, name);
-	column->name[strlen(name)] = '\0';
+	// column->name[strlen(name)] = '\0';
 	column->data = calloc(DEFAULT_COL_SIZE, sizeof(int));
 	column->index = NULL;
+	column->length = 0;
 
 	ret_status->code = OK;
 	return column;
@@ -125,6 +126,7 @@ Status relational_insert(Table* table, int* values) {
 
 	for (size_t i = 0; i < table->col_count; i++) {
 		table->columns[i]->data[table->table_length] = values[i];
+		table->columns[i]->length++;
 	}
 	table->table_length++;
 
@@ -132,6 +134,75 @@ Status relational_insert(Table* table, int* values) {
 
 	ret_status.code = OK;
 	return ret_status;
+}
+
+
+Result* select_column(Column* column, int lower, int upper, Status* ret_status) {
+	log_test("Selecting from column %s between %d and %d...\n", column->name, lower, upper);
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = 0;
+	result->capacity = DEFAULT_COL_SIZE;
+	result->data_type = INDEX;
+	size_t* indexes = calloc(DEFAULT_COL_SIZE, sizeof(size_t));
+
+	bool no_lower = (lower == 0) ? true : false;
+	bool no_upper = (upper == 0) ? true : false;
+
+	for (size_t i = 0; i < column->length; i++) {
+		if (
+			(no_lower || column->data[i] >= lower) &&
+			(no_upper || column->data[i] < upper)
+		) {
+			if (result->num_tuples == result->capacity) {
+				result->capacity = result->capacity * 2;
+				indexes = realloc(indexes, result->capacity * sizeof(size_t));
+			}
+			indexes[result->num_tuples] = i;
+			result->num_tuples++;
+		}
+	}
+
+	ret_status->code = OK;
+	result->payload = indexes;
+	return result;
+}
+
+Result* fetch(Column* column, Result* positions, Status* ret_status) {
+	Result* result = malloc(sizeof(result));
+	result->num_tuples = positions->num_tuples;
+	result->capacity = positions->num_tuples;
+	result->data_type = INT;
+
+	int* values = calloc(positions->num_tuples, sizeof(int));
+	for (size_t i = 0; i< positions->num_tuples; i++) {
+		size_t index = *((size_t*) positions->payload + i);
+		values[i] = column->data[index];
+	}
+
+	ret_status->code = OK;
+	result->payload = values;
+	return result;
+}
+
+
+char* print_result(Result* result, Status* ret_status) {
+	size_t len = 0;
+	char tuple[128];
+	
+	for (size_t i = 0; i < result->num_tuples; i++) {
+		len += sprintf(tuple, "%d", *((int*) result->payload + i)) + 1;
+	}
+
+
+	char* response = malloc((len + 1) * sizeof(char));
+
+	for (size_t j = 0; j < len; j++) {
+		sprintf(response, "%s%d\n", response, *((int*) result->payload + j));
+	}
+
+	response[len] = '\0';
+	ret_status->code = OK;
+	return response;
 }
 
 
@@ -225,7 +296,7 @@ Status load_table(const char* file_name) {
 }
 
 
-Status load_database() {
+Status db_startup() {
 	Status ret_status;
 
 	FILE* fp;
@@ -291,6 +362,7 @@ Status load_database() {
 				return ret_status;
 			}
 			column->data = realloc(column->data, table->table_length * sizeof(int));
+			column->length = table->table_length;
 
 			// Set the path name
 			char path[MAX_SIZE_NAME * 3 + strlen(MAINDIR) + 8];
@@ -336,13 +408,12 @@ Status load_database() {
 
 	fclose(fp);
 
-	log_test("Loading database from storage succeeded\n");
 	ret_status.code = OK;
 	return ret_status;
 }
 
 
-Status shutdown_database() {
+Status db_shutdown() {
     Status ret_status;
 
 	// If no db currently active, return OK
