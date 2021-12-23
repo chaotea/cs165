@@ -174,7 +174,7 @@ Result* fetch(Column* column, Result* positions, Status* ret_status) {
 	result->data_type = INT;
 
 	int* values = calloc(positions->num_tuples, sizeof(int));
-	for (size_t i = 0; i< positions->num_tuples; i++) {
+	for (size_t i = 0; i < positions->num_tuples; i++) {
 		size_t index = *((size_t*) positions->payload + i);
 		values[i] = column->data[index];
 	}
@@ -203,6 +203,114 @@ char* print_result(Result* result, Status* ret_status) {
 	response[len] = '\0';
 	ret_status->code = OK;
 	return response;
+}
+
+
+Result* add_values(Result* first, Result* second, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = first->num_tuples;
+	result->capacity = first->num_tuples;
+	result->data_type = INT;
+
+	int* values = calloc(result->num_tuples, sizeof(int));
+	for (size_t i = 0; i < result->num_tuples; i++) {
+		values[i] = *((int*) first->payload + i) + *((int*) second->payload + i);
+	}
+
+	ret_status->code = OK;
+	result->payload = values;
+	return result;
+}
+
+
+Result* subtract_values(Result* first, Result* second, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = first->num_tuples;
+	result->capacity = first->num_tuples;
+	result->data_type = INT;
+
+	int* values = calloc(result->num_tuples, sizeof(int));
+	for (size_t i = 0; i < result->num_tuples; i++) {
+		values[i] = *((int*) first->payload + i) - *((int*) second->payload + i);
+	}
+
+	ret_status->code = OK;
+	result->payload = values;
+	return result;
+}
+
+
+Result* calculate_sum(Result* values, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = 1;
+	result->capacity = 1;
+	result->data_type = LONG;
+	result->payload = malloc(sizeof(long));
+
+	long sum = 0;
+	for (size_t i = 0; i < values->num_tuples; i++) {
+		sum += (long) *((int*) values->payload + i);
+	}
+
+	ret_status->code = OK;
+	*((long*) result->payload) = sum;
+	return result;
+}
+
+Result* calculate_average(Result* values, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = 1;
+	result->capacity = 1;
+	result->data_type = FLOAT;
+	result->payload = malloc(sizeof(float));
+
+	long sum = 0;
+	for (size_t i = 0; i < values->num_tuples; i++) {
+		sum += (long) *((int*) values->payload + i);
+	}
+	float avg = sum / (float) values->num_tuples;
+
+	ret_status->code = OK;
+	*((float*) result->payload) = avg;
+	return result;
+}
+
+Result* calculate_max(Result* values, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = 1;
+	result->capacity = 1;
+	result->data_type = INT;
+	result->payload = malloc(sizeof(INT));
+
+	int max = *((int*) values->payload);
+	for (size_t i = 1; i < values->num_tuples; i++) {
+		if (*((int*) values->payload + i) > max) {
+			max = *((int*) values->payload + i);
+		}
+	}
+
+	ret_status->code = OK;
+	*((int*) result->payload) = max;
+	return result;
+}
+
+Result* calculate_min(Result* values, Status* ret_status) {
+	Result* result = malloc(sizeof(Result));
+	result->num_tuples = 1;
+	result->capacity = 1;
+	result->data_type = INT;
+	result->payload = malloc(sizeof(INT));
+
+	int min = *((int*) values->payload);
+	for (size_t i = 1; i < values->num_tuples; i++) {
+		if (*((int*) values->payload + i) < min) {
+			min = *((int*) values->payload + i);
+		}
+	}
+
+	ret_status->code = OK;
+	*((int*) result->payload) = min;
+	return result;
 }
 
 
@@ -536,4 +644,135 @@ Status db_shutdown() {
 
 	ret_status.code = OK;
     return ret_status;
+}
+
+char* execute_db_operator(DbOperator* query) {
+    // there is a small memory leak here (when combined with other parts of your database.)
+    // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak.
+    char* response = NULL;
+    Status status;
+
+    if (!query) {
+        log_err("No query\n");
+    } else if (query->type == CREATE) {
+        if(query->operator_fields.create_operator.create_type == _DB) {
+            if (create_db(query->operator_fields.create_operator.name).code != OK) {
+                log_err("Create db failed\n");
+            }
+            log_test("Create db succeeded\n");
+        } else if (query->operator_fields.create_operator.create_type == _TABLE) {
+            create_table(query->operator_fields.create_operator.db,
+                query->operator_fields.create_operator.name,
+                query->operator_fields.create_operator.col_count,
+                &status);
+            if (status.code != OK) {
+                log_err("Create table failed\n");
+            }
+            log_test("Create table succeeded\n");
+        } else if (query->operator_fields.create_operator.create_type == _COLUMN){
+            create_column(query->operator_fields.create_operator.table,
+                query->operator_fields.create_operator.name,
+                false,
+                &status);
+            if (status.code != OK) {
+                log_err("Create column failed\n");
+            }
+            log_test("Create column succeeded\n");
+        }
+    } else if (query->type == LOAD) {
+        if (load_table(query->operator_fields.load_operator.file_name).code != OK) {
+            log_err("Load failed\n");
+        }
+        log_test("Load succeeded\n");
+    } else if (query->type == INSERT) {
+        if (relational_insert(query->operator_fields.insert_operator.table, query->operator_fields.insert_operator.values).code != OK) {
+            log_err("Insert failed\n");
+        }
+        log_test("Insert succeeded\n");
+    } else if (query->type == SELECT) {
+        Result* indexes = select_column(query->operator_fields.select_operator.column,
+            query->operator_fields.select_operator.lower,
+            query->operator_fields.select_operator.upper,
+            &status);
+        if (status.code != OK) {
+            log_err("Select failed\n");
+        }
+        query->operator_fields.select_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
+        log_test("Select succeeded\n");
+    } else if (query->type == FETCH) {
+        Result* result = fetch(query->operator_fields.fetch_operator.column,
+            query->operator_fields.fetch_operator.positions,
+            &status);
+        if (status.code != OK) {
+            log_err("Fetch failed\n");
+        }
+        query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
+        log_test("Fetch succeeded\n");
+    } else if (query->type == PRINT) {
+        response = print_result(query->operator_fields.print_operator.result, &status);
+        if (status.code != OK) {
+            log_err("Print failed\n");
+        }
+        log_test("Print succeeded\n");
+    } else if (query->type == ADD) {
+        Result* result = add_values(query->operator_fields.math_operator.first,
+            query->operator_fields.math_operator.second,
+            &status);
+        if (status.code != OK) {
+            log_err("Add failed\n");
+        }
+        query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
+        log_test("Add succeeded\n");
+    } else if (query->type == SUBTRACT) {
+        Result* result = subtract_values(query->operator_fields.math_operator.first,
+            query->operator_fields.math_operator.second,
+            &status);
+        if (status.code != OK) {
+            log_err("Subtract failed\n");
+        }
+        query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
+        log_test("Subtract succeeded\n");
+    } else if (query->type == AGGREGATE) {
+        Result* result = NULL;
+        if (query->operator_fields.aggregate_operator.aggregate_type == _SUM) {
+            result = calculate_sum(query->operator_fields.aggregate_operator.values, &status);
+            if (status.code != OK) {
+                log_err("Sum failed\n");
+            }
+            log_test("Sum succeeded\n");
+        } else if (query->operator_fields.aggregate_operator.aggregate_type == _AVG) {
+            result = calculate_average(query->operator_fields.aggregate_operator.values, &status);
+            if (status.code != OK) {
+                log_err("Average failed\n");
+            }
+            log_test("Average succeeded\n");
+        } else if (query->operator_fields.aggregate_operator.aggregate_type == _MAX) {
+            result = calculate_max(query->operator_fields.aggregate_operator.values, &status);
+            if (status.code != OK) {
+                log_err("Max failed\n");
+            }
+            log_test("Max succeeded\n");
+        } else if (query->operator_fields.aggregate_operator.aggregate_type == _MIN) {
+            result = calculate_min(query->operator_fields.aggregate_operator.values, &status);
+            if (status.code != OK) {
+                log_err("Min failed\n");
+            }
+            log_test("Min succeeded\n");
+        }
+        query->operator_fields.aggregate_operator.handle->generalized_column.column_type = RESULT;
+        query->operator_fields.aggregate_operator.handle->generalized_column.column_pointer.result = result;
+    } else if (query->type == SHUTDOWN) {
+        if (db_shutdown().code != OK) {
+            log_err("Shutdown failed\n");
+        }
+        log_test("Shutdown succeeded\n");
+    } else {
+        log_err("Unknown query while executing\n");
+    }
+    free(query);
+    return response;
 }

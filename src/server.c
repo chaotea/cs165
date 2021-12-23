@@ -41,87 +41,6 @@
  *      How will you interpret different queries?
  *      How will you ensure different queries invoke different execution paths in your code?
  **/
-char* execute_DbOperator(DbOperator* query) {
-    // there is a small memory leak here (when combined with other parts of your database.)
-    // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak.
-    char* response = NULL;
-    Status status;
-
-    if (!query) {
-        log_err("No query\n");
-    } else if (query->type == CREATE) {
-        if(query->operator_fields.create_operator.create_type == _DB) {
-            if (create_db(query->operator_fields.create_operator.name).code != OK) {
-                log_err("Create db failed\n");
-            }
-            log_test("Create db succeeded\n");
-        } else if (query->operator_fields.create_operator.create_type == _TABLE) {
-            create_table(query->operator_fields.create_operator.db,
-                query->operator_fields.create_operator.name,
-                query->operator_fields.create_operator.col_count,
-                &status);
-            if (status.code != OK) {
-                log_err("Create table failed\n");
-            }
-            log_test("Create table succeeded\n");
-        } else if (query->operator_fields.create_operator.create_type == _COLUMN){
-            create_column(query->operator_fields.create_operator.table,
-                query->operator_fields.create_operator.name,
-                false,
-                &status);
-            if (status.code != OK) {
-                log_err("Create column failed\n");
-            }
-            log_test("Create column succeeded\n");
-        }
-    } else if (query->type == LOAD) {
-        if (load_table(query->operator_fields.load_operator.file_name).code != OK) {
-            log_err("Load failed\n");
-        }
-        log_test("Load succeeded\n");
-    } else if (query->type == INSERT) {
-        if (relational_insert(query->operator_fields.insert_operator.table, query->operator_fields.insert_operator.values).code != OK) {
-            log_err("Insert failed\n");
-        }
-        log_test("Insert succeeded\n");
-    } else if (query->type == SELECT) {
-        Result* indexes = select_column(query->operator_fields.select_operator.column,
-            query->operator_fields.select_operator.lower,
-            query->operator_fields.select_operator.upper,
-            &status);
-        if (status.code != OK) {
-            log_err("Select failed\n");
-        }
-        query->operator_fields.select_operator.handle->generalized_column.column_type = RESULT;
-        query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
-        log_test("Select succeeded\n");
-    } else if (query->type == FETCH) {
-        Result* result = fetch(query->operator_fields.fetch_operator.column,
-            query->operator_fields.fetch_operator.positions,
-            &status);
-        if (status.code != OK) {
-            log_err("Fetch failed\n");
-        }
-        query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
-        query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
-        log_test("Fetch succeeded\n");
-    } else if (query->type == PRINT) {
-        response = print_result(query->operator_fields.print_operator.result, &status);
-        if (status.code != OK) {
-            log_err("Print failed\n");
-        }
-        log_test("Print succeeded\n");
-    } else if (query->type == SHUTDOWN) {
-        if (db_shutdown().code != OK) {
-            log_err("Shutdown failed\n");
-        }
-        log_test("Shutdown succeeded\n");
-    } else {
-        log_err("Unknown query while executing\n");
-    }
-    free(query);
-    return response;
-}
 
 /**
  * handle_client(client_socket)
@@ -172,7 +91,7 @@ void handle_client(int client_socket) {
             //    Corresponding database operator is executed over the query
             char* response = NULL;
             if (query) {
-                response = execute_DbOperator(query);
+                response = execute_db_operator(query);
                 if (response) {
                     send_message.length = strlen(response);
                     char send_buffer[send_message.length + 1];

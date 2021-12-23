@@ -28,8 +28,24 @@
 char* next_token(char** tokenizer, message_status* status) {
     char* token = strsep(tokenizer, ",");
     if (token == NULL) {
-        *status= INCORRECT_FORMAT;
+        *status = INCORRECT_FORMAT;
     }
+    return token;
+}
+
+char* last_token(char** tokenizer, message_status* status) {
+    char* token = next_token(tokenizer, status);
+
+    // Read and chop off last char, which should be a ')'
+    int last_char = strlen(token) - 1;
+    if (token[last_char] != ')') {
+        *status = INCORRECT_FORMAT;
+        return NULL;
+    }
+
+    // Replace the ')' with a null terminating character
+    token[last_char] = '\0';
+
     return token;
 }
 
@@ -484,6 +500,48 @@ DbOperator* parse_print(char* print_arguments, message* send_message, ClientCont
     }
 }
 
+DbOperator* parse_add_or_subtract(char* add_subtract_arguments, bool add, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
+    if (strncmp(add_subtract_arguments, "(", 1) == 0) {
+        add_subtract_arguments++;
+        char** add_subtract_arguments_index = &add_subtract_arguments;
+        char* first_name = next_token(add_subtract_arguments_index, &send_message->status);
+        char* second_name = last_token(add_subtract_arguments_index, &send_message->status);
+
+        Result* first = lookup_handle(context, first_name)->generalized_column.column_pointer.result;
+        Result* second = lookup_handle(context, second_name)->generalized_column.column_pointer.result;
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = add ? ADD : SUBTRACT;
+        dbo->operator_fields.math_operator.first = first;
+        dbo->operator_fields.math_operator.second = second;
+        dbo->operator_fields.math_operator.handle = handle;
+        return dbo;
+    } else {
+        log_err("Missing '(' in query\n");
+        send_message->status = INCORRECT_FORMAT;
+        return NULL;
+    }
+}
+
+
+DbOperator* parse_aggregate(char* aggregate_arguments, AggregateType type, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
+    if (strncmp(aggregate_arguments, "(", 1) == 0) {
+        aggregate_arguments++;
+        char* values_name = last_token(&aggregate_arguments, &send_message->status);
+
+        Result* values = lookup_handle(context, values_name)->generalized_column.column_pointer.result;
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->operator_fields.aggregate_operator.aggregate_type = type;
+        dbo->operator_fields.aggregate_operator.values = values;
+        dbo->operator_fields.aggregate_operator.handle = handle;
+        return dbo;
+    } else {
+        log_err("Missing '(' in query\n");
+        send_message->status = INCORRECT_FORMAT;
+        return NULL;
+    }
+}
 
 /**
  * parse_command takes as input the send_message from the client and then
@@ -510,7 +568,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
 
     char* equals_pointer = strchr(query_command, '=');
     char* handle_name = query_command;
-    GeneralizedColumnHandle* handle;
+    GeneralizedColumnHandle* handle = NULL;
     if (equals_pointer != NULL) {
         // handle exists, store here.
         *equals_pointer = '\0';
@@ -553,6 +611,24 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         DbOperator* dbo = malloc(sizeof(DbOperator));
         dbo->type = SHUTDOWN;
         return dbo;
+    } else if (strncmp(query_command, "add", 3) == 0) {
+        query_command += 3;
+        dbo = parse_add_or_subtract(query_command, true, send_message, context, handle);
+    } else if (strncmp(query_command, "sub", 3) == 0) {
+        query_command += 3;
+        dbo = parse_add_or_subtract(query_command, false, send_message, context, handle);
+    } else if (strncmp(query_command, "sum", 3) == 0) {
+        query_command += 3;
+        dbo = parse_aggregate(query_command, _SUM, send_message, context, handle);
+    } else if (strncmp(query_command, "avg", 3) == 0) {
+        query_command += 3;
+        dbo = parse_aggregate(query_command, _AVG, send_message, context, handle);
+    } else if (strncmp(query_command, "max", 3) == 0) {
+        query_command += 3;
+        dbo = parse_aggregate(query_command, _MAX, send_message, context, handle);
+    } else if (strncmp(query_command, "min", 3) == 0) {
+        query_command += 3;
+        dbo = parse_aggregate(query_command, _MIN, send_message, context, handle);
     } else {
         send_message->status = UNKNOWN_COMMAND;
         return dbo;

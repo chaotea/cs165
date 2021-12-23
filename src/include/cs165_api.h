@@ -208,9 +208,19 @@ typedef enum OperatorType {
     SELECT,
     FETCH,
     PRINT,
+    ADD,
+    SUBTRACT,
+    AGGREGATE,
     SHUTDOWN
 } OperatorType;
 
+
+typedef enum AggregateType {
+    _SUM,
+    _AVG,
+    _MAX,
+    _MIN
+} AggregateType;
 
 typedef enum CreateType {
     _DB,
@@ -265,6 +275,18 @@ typedef struct PrintOperator {
     Result* result;
 } PrintOperator;
 
+typedef struct MathOperator {
+    Result* first;
+    Result* second;
+    GeneralizedColumnHandle* handle;
+} MathOperator;
+
+typedef struct AggregateOperator {
+    AggregateType aggregate_type;
+    Result* values;
+    GeneralizedColumnHandle* handle;
+} AggregateOperator;
+
 /*
  * union type holding the fields of any operator
  */
@@ -275,6 +297,8 @@ typedef union OperatorFields {
     SelectOperator select_operator;
     FetchOperator fetch_operator;
     PrintOperator print_operator;
+    MathOperator math_operator;
+    AggregateOperator aggregate_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
@@ -312,11 +336,23 @@ Result* fetch(Column* column, Result* positions, Status* ret_status);
 
 char* print_result(Result* result, Status* ret_status);
 
+Result* add_values(Result* first, Result* second, Status* ret_status);
+
+Result* subtract_values(Result* first, Result* second, Status* ret_status);
+
+Result* calculate_sum(Result* values, Status* ret_status);
+
+Result* calculate_average(Result* values, Status* ret_status);
+
+Result* calculate_max(Result* values, Status* ret_status);
+
+Result* calculate_min(Result* values, Status* ret_status);
+
 Status load_table(const char* file_name);
 
 Status db_shutdown();
 
-char** execute_db_operator(DbOperator* query);
+char* execute_db_operator(DbOperator* query);
 
 void db_operator_free(DbOperator* query);
 
