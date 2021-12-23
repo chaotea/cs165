@@ -120,6 +120,8 @@ void handle_client(int client_socket) {
                 log_err("Error parsing message\n");
             }
 
+            // chunk the response if too big
+
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
             if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
                 log_err("Server failed to send message status\n");
@@ -225,16 +227,16 @@ int main(void) {
     socklen_t t = sizeof(remote);
     int client_socket = 0;
 
-    if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
-        log_err("L%d: Failed to accept a new connection.\n", __LINE__);
-        exit(1);
+    while (true) {
+        if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
+            log_err("L%d: Failed to accept a new connection.\n", __LINE__);
+            exit(1);
+        }
+        handle_client(client_socket);
+        
+        if (current_db == NULL) {
+            break;
+        }
     }
-
-    handle_client(client_socket);
-
-    if (current_db) {
-        db_shutdown();
-    }
-
     return 0;
 }

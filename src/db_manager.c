@@ -208,6 +208,20 @@ char* print_result(Result* result, Status* ret_status) {
 		// }
 
 		response[len] = '\0';
+
+	} else if (result->data_type == LONG) {
+		for (size_t i = 0; i < result->num_tuples; i++) {
+			len += sprintf(tuple, "%ld", *((long int*) result->payload + i)) + 1;
+		}
+
+		response = malloc((len + 1) * sizeof(char));
+
+		for (size_t j = 0; j < result->num_tuples; j++) {
+			sprintf(response, "%s%ld\n", response, *((long int*) result->payload + j));
+		}
+
+		response[len] = '\0';
+		
 	} else if (result->data_type == FLOAT) {
 		for (size_t i = 0; i < result->num_tuples; i++) {
 			len += sprintf(tuple, "%.2f", *((float*) result->payload + i)) + 1;
@@ -266,15 +280,15 @@ Result* calculate_sum(Result* values, Status* ret_status) {
 	result->num_tuples = 1;
 	result->capacity = 1;
 	result->data_type = LONG;
-	result->payload = malloc(sizeof(long));
+	result->payload = malloc(sizeof(long int));
 
-	long sum = 0;
+	long int sum = 0;
 	for (size_t i = 0; i < values->num_tuples; i++) {
-		sum += (long) *((int*) values->payload + i);
+		sum += (long int) *((int*) values->payload + i);
 	}
 
 	ret_status->code = OK;
-	*((long*) result->payload) = sum;
+	*((long int*) result->payload) = sum;
 	return result;
 }
 
@@ -285,9 +299,9 @@ Result* calculate_average(Result* values, Status* ret_status) {
 	result->data_type = FLOAT;
 	result->payload = malloc(sizeof(float));
 
-	long sum = 0;
+	long int sum = 0;
 	for (size_t i = 0; i < values->num_tuples; i++) {
-		sum += (long) *((int*) values->payload + i);
+		sum += (long int) *((int*) values->payload + i);
 	}
 	float avg = sum / (float) values->num_tuples;
 
@@ -514,7 +528,7 @@ Status db_startup() {
 				ret_status.code = ERROR;
     			return ret_status;
 			}
-
+			// column->data = data
 			// Write data from file to column
 			for (size_t i = 0; i < table->table_length; i++) {
 				column->data[i] = data[i];
