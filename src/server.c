@@ -131,9 +131,18 @@ void handle_client(int client_socket) {
                 log_err("Server failed to send message body\n");
                 exit(1);
             }
+
+            // 5. Free response
+            if (response) {
+                free(response);
+            }
         }
     } while (!done);
 
+    for (int h = 0; h < client_context->chandles_in_use; h++) {
+        free(client_context->chandle_table[h].generalized_column.column_pointer.result->payload);
+        free(client_context->chandle_table[h].generalized_column.column_pointer.result);
+    }
     free(client_context->chandle_table);
     free(client_context);
 
@@ -222,6 +231,10 @@ int main(void) {
     }
 
     handle_client(client_socket);
+
+    if (current_db) {
+        db_shutdown();
+    }
 
     return 0;
 }

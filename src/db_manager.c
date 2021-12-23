@@ -138,7 +138,6 @@ Status relational_insert(Table* table, int* values) {
 
 
 Result* select_column(Column* column, int lower, int upper, Status* ret_status) {
-	log_test("Selecting from column %s between %d and %d...\n", column->name, lower, upper);
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 0;
 	result->capacity = DEFAULT_COL_SIZE;
@@ -168,7 +167,7 @@ Result* select_column(Column* column, int lower, int upper, Status* ret_status) 
 }
 
 Result* fetch(Column* column, Result* positions, Status* ret_status) {
-	Result* result = malloc(sizeof(result));
+	Result* result = malloc(sizeof(Result));
 	result->num_tuples = positions->num_tuples;
 	result->capacity = positions->num_tuples;
 	result->data_type = INT;
@@ -188,19 +187,41 @@ Result* fetch(Column* column, Result* positions, Status* ret_status) {
 char* print_result(Result* result, Status* ret_status) {
 	size_t len = 0;
 	char tuple[128];
-	
-	for (size_t i = 0; i < result->num_tuples; i++) {
-		len += sprintf(tuple, "%d", *((int*) result->payload + i)) + 1;
+	char* response;
+
+	if (result->data_type == INT) {
+		for (size_t i = 0; i < result->num_tuples; i++) {
+			len += sprintf(tuple, "%d", *((int*) result->payload + i)) + 1;
+		}
+
+		response = malloc((len + 1) * sizeof(char));
+
+		for (size_t j = 0; j < result->num_tuples; j++) {
+			sprintf(response, "%s%d\n", response, *((int*) result->payload + j));
+		}
+
+		// for (size_t j = 0; j < result->num_tuples; j++) {
+		// 	memcpy(response, result->payload + j, tuple_lens[j]);
+		// 	response += tuple_lens[j];
+		// 	*response = '\n';
+		// 	response++;
+		// }
+
+		response[len] = '\0';
+	} else if (result->data_type == FLOAT) {
+		for (size_t i = 0; i < result->num_tuples; i++) {
+			len += sprintf(tuple, "%.2f", *((float*) result->payload + i)) + 1;
+		}
+
+		response = malloc((len + 1) * sizeof(char));
+
+		for (size_t j = 0; j < result->num_tuples; j++) {
+			sprintf(response, "%s%.2f\n", response, *((float*) result->payload + j));
+		}
+
+		response[len] = '\0';
 	}
 
-
-	char* response = malloc((len + 1) * sizeof(char));
-
-	for (size_t j = 0; j < len; j++) {
-		sprintf(response, "%s%d\n", response, *((int*) result->payload + j));
-	}
-
-	response[len] = '\0';
 	ret_status->code = OK;
 	return response;
 }
@@ -317,8 +338,6 @@ Result* calculate_min(Result* values, Status* ret_status) {
 // Load database from file
 Status load_table(const char* file_name) {
 	Status ret_status;
-
-	log_test("Loading table from file %s\n", file_name);
 
 	FILE* fp;
 	fp = fopen(file_name, "r");
@@ -641,6 +660,8 @@ Status db_shutdown() {
 	}
 	free(current_db->tables);
 	free(current_db);
+
+	current_db = NULL;
 
 	ret_status.code = OK;
     return ret_status;

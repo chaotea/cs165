@@ -532,6 +532,7 @@ DbOperator* parse_aggregate(char* aggregate_arguments, AggregateType type, messa
         Result* values = lookup_handle(context, values_name)->generalized_column.column_pointer.result;
 
         DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = AGGREGATE;
         dbo->operator_fields.aggregate_operator.aggregate_type = type;
         dbo->operator_fields.aggregate_operator.values = values;
         dbo->operator_fields.aggregate_operator.handle = handle;
