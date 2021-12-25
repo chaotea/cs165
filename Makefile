@@ -97,5 +97,22 @@ clean:
 ###################### Begin Customization ########################
 
 # make your own target for your own testing / dev
+# make startcontainer outputdir=~/Desktop/cs165-project/test_outputs testdir=~/Desktop/cs165-project/staff_test
+# make run_mile mile_id=1 server_wait=5
+
+test_run:
+	$(eval DOCKER_CONT_ID := $(shell docker container run \
+		-v $(BASE_DIR)/src:/cs165/src \
+		-v $(BASE_DIR)/staff_test:/cs165/staff_test:ro \
+		-v $(BASE_DIR)/infra_scripts:/cs165/infra_scripts \
+		-v $(BASE_DIR)/student_outputs:/cs165/student_outputs \
+		-v $(BASE_DIR)/test_outputs:/cs165/infra_outputs \
+		-d --rm -t --privileged -i cs165 bash))
+	$(DOCKER_CMD) exec $(DOCKER_CONT_ID) bash /cs165/infra_scripts/prep_build.sh
+	@$(DOCKER_CMD) exec $(DOCKER_CONT_ID) bash /cs165/infra_scripts/test_milestone.sh 1 5
+	$(DOCKER_CMD) stop $(DOCKER_CONT_ID)
+
+test_clean:
+	rm -r src/data
 
 ###################### End Customization ##########################
