@@ -208,12 +208,15 @@ typedef enum OperatorType {
     SELECT,
     FETCH,
     PRINT,
-    ADD,
-    SUBTRACT,
+    ARITHMETIC,
     AGGREGATE,
     SHUTDOWN
 } OperatorType;
 
+typedef enum ArithmeticType {
+    _ADDITION,
+    _SUBTRACTION
+} ArithmeticType;
 
 typedef enum AggregateType {
     _SUM,
@@ -275,15 +278,16 @@ typedef struct PrintOperator {
     Result* result;
 } PrintOperator;
 
-typedef struct MathOperator {
+typedef struct ArithmeticOperator {
+    ArithmeticType arithmetic_type;
     Result* first;
     Result* second;
     GeneralizedColumnHandle* handle;
-} MathOperator;
+} ArithmeticOperator;
 
 typedef struct AggregateOperator {
     AggregateType aggregate_type;
-    Result* values;
+    GeneralizedColumn values;
     GeneralizedColumnHandle* handle;
 } AggregateOperator;
 
@@ -297,7 +301,7 @@ typedef union OperatorFields {
     SelectOperator select_operator;
     FetchOperator fetch_operator;
     PrintOperator print_operator;
-    MathOperator math_operator;
+    ArithmeticOperator arithmetic_operator;
     AggregateOperator aggregate_operator;
 } OperatorFields;
 /*
@@ -340,13 +344,13 @@ Result* add_values(Result* first, Result* second, Status* ret_status);
 
 Result* subtract_values(Result* first, Result* second, Status* ret_status);
 
-Result* calculate_sum(Result* values, Status* ret_status);
+Result* calculate_sum(GeneralizedColumn values, Status* ret_status);
 
-Result* calculate_average(Result* values, Status* ret_status);
+Result* calculate_average(GeneralizedColumn values, Status* ret_status);
 
-Result* calculate_max(Result* values, Status* ret_status);
+Result* calculate_max(GeneralizedColumn values, Status* ret_status);
 
-Result* calculate_min(Result* values, Status* ret_status);
+Result* calculate_min(GeneralizedColumn values, Status* ret_status);
 
 Status load_table(const char* file_name);
 

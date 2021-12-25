@@ -500,7 +500,7 @@ DbOperator* parse_print(char* print_arguments, message* send_message, ClientCont
     }
 }
 
-DbOperator* parse_add_or_subtract(char* add_subtract_arguments, bool add, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
+DbOperator* parse_arithmetic(char* add_subtract_arguments, ArithmeticType type, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
     if (strncmp(add_subtract_arguments, "(", 1) == 0) {
         add_subtract_arguments++;
         char** add_subtract_arguments_index = &add_subtract_arguments;
@@ -511,10 +511,11 @@ DbOperator* parse_add_or_subtract(char* add_subtract_arguments, bool add, messag
         Result* second = lookup_handle(context, second_name)->generalized_column.column_pointer.result;
 
         DbOperator* dbo = malloc(sizeof(DbOperator));
-        dbo->type = add ? ADD : SUBTRACT;
-        dbo->operator_fields.math_operator.first = first;
-        dbo->operator_fields.math_operator.second = second;
-        dbo->operator_fields.math_operator.handle = handle;
+        dbo->type = ARITHMETIC;
+        dbo->operator_fields.arithmetic_operator.arithmetic_type = type;
+        dbo->operator_fields.arithmetic_operator.first = first;
+        dbo->operator_fields.arithmetic_operator.second = second;
+        dbo->operator_fields.arithmetic_operator.handle = handle;
         return dbo;
     } else {
         log_err("Missing '(' in query\n");
@@ -529,13 +530,19 @@ DbOperator* parse_aggregate(char* aggregate_arguments, AggregateType type, messa
         aggregate_arguments++;
         char* values_name = last_token(&aggregate_arguments, &send_message->status);
 
-        Result* values = lookup_handle(context, values_name)->generalized_column.column_pointer.result;
-
         DbOperator* dbo = malloc(sizeof(DbOperator));
         dbo->type = AGGREGATE;
         dbo->operator_fields.aggregate_operator.aggregate_type = type;
-        dbo->operator_fields.aggregate_operator.values = values;
         dbo->operator_fields.aggregate_operator.handle = handle;
+
+        if (strchr(values_name, '.')) {
+            dbo->operator_fields.aggregate_operator.values.column_type = COLUMN;
+            dbo->operator_fields.aggregate_operator.values.column_pointer.column = lookup_column(values_name);
+        } else {
+            dbo->operator_fields.aggregate_operator.values.column_type = RESULT;
+            dbo->operator_fields.aggregate_operator.values.column_pointer.result = lookup_handle(context, values_name)->generalized_column.column_pointer.result;
+        }
+
         return dbo;
     } else {
         log_err("Missing '(' in query\n");
@@ -575,7 +582,13 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         *equals_pointer = '\0';
         cs165_log(stdout, "FILE HANDLE: %s\n", handle_name);
 
-        handle = create_handle(context, handle_name);
+        handle = lookup_handle(context, handle_name);
+        if (handle == NULL) {
+            handle = create_handle(context, handle_name);
+        } else {
+            free(handle->generalized_column.column_pointer.result->payload);
+            free(handle->generalized_column.column_pointer.result);
+        }
 
         query_command = ++equals_pointer;
     } else {
@@ -614,10 +627,10 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         return dbo;
     } else if (strncmp(query_command, "add", 3) == 0) {
         query_command += 3;
-        dbo = parse_add_or_subtract(query_command, true, send_message, context, handle);
+        dbo = parse_arithmetic(query_command, _ADDITION, send_message, context, handle);
     } else if (strncmp(query_command, "sub", 3) == 0) {
         query_command += 3;
-        dbo = parse_add_or_subtract(query_command, false, send_message, context, handle);
+        dbo = parse_arithmetic(query_command, _SUBTRACTION, send_message, context, handle);
     } else if (strncmp(query_command, "sum", 3) == 0) {
         query_command += 3;
         dbo = parse_aggregate(query_command, _SUM, send_message, context, handle);

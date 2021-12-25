@@ -273,7 +273,7 @@ Result* subtract_values(Result* first, Result* second, Status* ret_status) {
 }
 
 
-Result* calculate_sum(Result* values, Status* ret_status) {
+Result* calculate_sum(GeneralizedColumn values, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 1;
 	result->capacity = 1;
@@ -281,8 +281,26 @@ Result* calculate_sum(Result* values, Status* ret_status) {
 	result->payload = malloc(sizeof(long int));
 
 	long int sum = 0;
-	for (size_t i = 0; i < values->num_tuples; i++) {
-		sum += (long int) *((int*) values->payload + i);
+	if (values.column_type == COLUMN) {
+		Column* column_vals = values.column_pointer.column;
+		for (size_t i = 0; i < column_vals->length; i++) {
+			sum += (long int) column_vals->data[i];
+		}
+	} else if (values.column_type == RESULT) {
+		Result* result_vals = values.column_pointer.result;
+		if (result_vals->data_type == INT) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += (long int) *((int*) result_vals->payload + i);
+			}
+		} else if (result_vals->data_type == LONG) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += *((long int*) result_vals->payload + i);
+			}
+		} else if (result_vals->data_type == FLOAT) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += (long int) *((float*) result_vals->payload + i);
+			}
+		}
 	}
 
 	ret_status->code = OK;
@@ -290,7 +308,7 @@ Result* calculate_sum(Result* values, Status* ret_status) {
 	return result;
 }
 
-Result* calculate_average(Result* values, Status* ret_status) {
+Result* calculate_average(GeneralizedColumn values, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 1;
 	result->capacity = 1;
@@ -298,51 +316,144 @@ Result* calculate_average(Result* values, Status* ret_status) {
 	result->payload = malloc(sizeof(float));
 
 	long int sum = 0;
-	for (size_t i = 0; i < values->num_tuples; i++) {
-		sum += (long int) *((int*) values->payload + i);
+	float avg;
+	if (values.column_type == COLUMN) {
+		Column* column_vals = values.column_pointer.column;
+		for (size_t i = 0; i < column_vals->length; i++) {
+			sum += (long int) column_vals->data[i];
+		}
+		avg = sum / (float) column_vals->length;
+	} else if (values.column_type == RESULT) {
+		Result* result_vals = values.column_pointer.result;
+		if (result_vals->data_type == INT) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += (long int) *((int*) result_vals->payload + i);
+			}
+		} else if (result_vals->data_type == LONG) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += *((long int*) result_vals->payload + i);
+			}
+		} else if (result_vals->data_type == FLOAT) {
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				sum += (long int) *((float*) result_vals->payload + i);
+			}
+		}
+		avg = sum / (float) result_vals->num_tuples;
 	}
-	float avg = sum / (float) values->num_tuples;
 
 	ret_status->code = OK;
 	*((float*) result->payload) = avg;
 	return result;
 }
 
-Result* calculate_max(Result* values, Status* ret_status) {
+Result* calculate_max(GeneralizedColumn values, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 1;
 	result->capacity = 1;
-	result->data_type = INT;
-	result->payload = malloc(sizeof(INT));
 
-	int max = *((int*) values->payload);
-	for (size_t i = 1; i < values->num_tuples; i++) {
-		if (*((int*) values->payload + i) > max) {
-			max = *((int*) values->payload + i);
+	if (values.column_type == COLUMN) {
+		Column* column_vals = values.column_pointer.column;
+		int max = column_vals->data[0];
+		for (size_t i = 0; i < column_vals->length; i++) {
+			if (column_vals->data[i] > max) {
+				max = column_vals->data[i];
+			}
+		}
+		result->data_type = INT;
+		result->payload = malloc(sizeof(int));
+		*((int*) result->payload) = max;
+	} else if (values.column_type == RESULT) {
+		Result* result_vals = values.column_pointer.result;
+		if (result_vals->data_type == INT) {
+			int max = *((int*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((int*) result_vals->payload + i) > max) {
+					max = *((int*) result_vals->payload + i);
+				}
+			}
+			result->data_type = INT;
+			result->payload = malloc(sizeof(int));
+			*((int*) result->payload) = max;
+		} else if (result_vals->data_type == LONG) {
+			long int max = *((long int*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((long int*) result_vals->payload + i) > max) {
+					max = *((long int*) result_vals->payload + i);
+				}
+			}
+			result->data_type = LONG;
+			result->payload = malloc(sizeof(long int));
+			*((long int*) result->payload) = max;
+		} else if (result_vals->data_type == FLOAT) {
+			float max = *((float*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((float*) result_vals->payload + i) > max) {
+					max = *((float*) result_vals->payload + i);
+				}
+			}
+			result->data_type = FLOAT;
+			result->payload = malloc(sizeof(float));
+			*((float*) result->payload) = max;
 		}
 	}
 
 	ret_status->code = OK;
-	*((int*) result->payload) = max;
 	return result;
 }
 
-Result* calculate_min(Result* values, Status* ret_status) {
+Result* calculate_min(GeneralizedColumn values, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 1;
 	result->capacity = 1;
-	result->data_type = INT;
-	result->payload = malloc(sizeof(INT));
 
-	int min = *((int*) values->payload);
-	for (size_t i = 1; i < values->num_tuples; i++) {
-		if (*((int*) values->payload + i) < min) {
-			min = *((int*) values->payload + i);
+	if (values.column_type == COLUMN) {
+		Column* column_vals = values.column_pointer.column;
+		int min = column_vals->data[0];
+		for (size_t i = 0; i < column_vals->length; i++) {
+			if (column_vals->data[i] < min) {
+				min = column_vals->data[i];
+			}
 		}
+		result->data_type = INT;
+		result->payload = malloc(sizeof(int));
+		*((int*) result->payload) = min;
+	} else if (values.column_type == RESULT) {
+		Result* result_vals = values.column_pointer.result;
+		if (result_vals->data_type == INT) {
+			int min = *((int*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((int*) result_vals->payload + i) < min) {
+					min = *((int*) result_vals->payload + i);
+				}
+			}
+			result->data_type = INT;
+			result->payload = malloc(sizeof(int));
+			*((int*) result->payload) = min;
+		} else if (result_vals->data_type == LONG) {
+			long int min = *((long int*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((long int*) result_vals->payload + i) < min) {
+					min = *((long int*) result_vals->payload + i);
+				}
+			}
+			result->data_type = LONG;
+			result->payload = malloc(sizeof(long int));
+			*((long int*) result->payload) = min;
+		} else if (result_vals->data_type == FLOAT) {
+			float min = *((float*) result_vals->payload);
+			for (size_t i = 0; i < result_vals->num_tuples; i++) {
+				if (*((float*) result_vals->payload + i) < min) {
+					min = *((float*) result_vals->payload + i);
+				}
+			}
+			result->data_type = FLOAT;
+			result->payload = malloc(sizeof(float));
+			*((float*) result->payload) = min;
+		}
+
 	}
 
 	ret_status->code = OK;
-	*((int*) result->payload) = min;
 	return result;
 }
 
@@ -761,28 +872,30 @@ char* execute_db_operator(DbOperator* query) {
         } else {
         	log_test("Print succeeded\n");
 		}
-    } else if (query->type == ADD) {
-        Result* result = add_values(query->operator_fields.math_operator.first,
-            query->operator_fields.math_operator.second,
-            &status);
-        if (status.code != OK) {
-            log_err("Add failed\n");
-        } else {
-			log_test("Add succeeded\n");
+    } else if (query->type == ARITHMETIC) {
+		if (query->operator_fields.arithmetic_operator.arithmetic_type == _ADDITION) {
+			Result* result = add_values(query->operator_fields.arithmetic_operator.first,
+				query->operator_fields.arithmetic_operator.second,
+				&status);
+			if (status.code != OK) {
+				log_err("Add failed\n");
+			} else {
+				log_test("Add succeeded\n");
+			}
+			query->operator_fields.arithmetic_operator.handle->generalized_column.column_type = RESULT;
+			query->operator_fields.arithmetic_operator.handle->generalized_column.column_pointer.result = result;
+		} else if (query->operator_fields.arithmetic_operator.arithmetic_type == _SUBTRACTION) {
+			Result* result = subtract_values(query->operator_fields.arithmetic_operator.first,
+				query->operator_fields.arithmetic_operator.second,
+				&status);
+			if (status.code != OK) {
+				log_err("Subtract failed\n");
+			} else {
+				log_test("Subtract succeeded\n");
+			}
+			query->operator_fields.arithmetic_operator.handle->generalized_column.column_type = RESULT;
+			query->operator_fields.arithmetic_operator.handle->generalized_column.column_pointer.result = result;
 		}
-        query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
-        query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
-    } else if (query->type == SUBTRACT) {
-        Result* result = subtract_values(query->operator_fields.math_operator.first,
-            query->operator_fields.math_operator.second,
-            &status);
-        if (status.code != OK) {
-            log_err("Subtract failed\n");
-        } else {
-			log_test("Subtract succeeded\n");
-		}
-        query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
-        query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
     } else if (query->type == AGGREGATE) {
         Result* result = NULL;
         if (query->operator_fields.aggregate_operator.aggregate_type == _SUM) {
