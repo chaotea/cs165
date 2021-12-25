@@ -65,11 +65,11 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_st
 Status create_db(const char* db_name) {
 	Status ret_status;
 
-	if (current_db) {
-		log_err("Error creating database. There is already a database currently active.\n");
-		ret_status.code = ERROR;
-		return ret_status;
-	}
+	// if (current_db) {
+	// 	log_err("Error creating database. There is already a database currently active.\n");
+	// 	ret_status.code = ERROR;
+	// 	return ret_status;
+	// }
 
 	current_db = malloc(sizeof(Db));
 	strcpy(current_db->name, db_name);
