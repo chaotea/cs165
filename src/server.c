@@ -210,6 +210,7 @@ int main(void) {
     }
 
     // Load database from storage
+    log_info("Starting database...\n");
     if (db_startup().code != OK) {
         log_err("Failed to load database from storage\n");
     }
@@ -230,10 +231,14 @@ int main(void) {
         handle_client(client_socket, &shutdown);
         
         if (shutdown == true) {
-            if (db_shutdown().code != OK) {
-                log_err("Failed to shutdown database\n");
-            }
+            break;
         }
     }
+
+    log_info("Shutting down database...\n");
+    if (db_shutdown().code != OK) {
+        log_err("Failed to shutdown database\n");
+    }
+
     return 0;
 }
