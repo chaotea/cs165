@@ -804,7 +804,7 @@ Status db_shutdown() {
     return ret_status;
 }
 
-char* execute_db_operator(DbOperator* query) {
+char* execute_db_operator(DbOperator* query, bool* shutdown_flag) {
     // there is a small memory leak here (when combined with other parts of your database.)
     // as practice with something like valgrind and to develop intuition on memory leaks, find and fix the memory leak.
     char* response = NULL;
@@ -937,11 +937,7 @@ char* execute_db_operator(DbOperator* query) {
         query->operator_fields.aggregate_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.aggregate_operator.handle->generalized_column.column_pointer.result = result;
     } else if (query->type == SHUTDOWN) {
-        if (db_shutdown().code != OK) {
-            log_err("Shutdown failed\n");
-        } else {
-			log_test("Shutdown succeeded\n");
-		}
+        *shutdown_flag = true;
     } else {
         log_err("Unknown query while executing\n");
     }

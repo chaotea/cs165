@@ -358,7 +358,7 @@ Status load_table(const char* file_name);
 
 Status db_shutdown();
 
-char* execute_db_operator(DbOperator* query);
+char* execute_db_operator(DbOperator* query, bool* shutdown_flag);
 
 void db_operator_free(DbOperator* query);
 

@@ -47,7 +47,7 @@
  * This is the execution routine after a client has connected.
  * It will continually listen for messages from the client and execute queries.
  **/
-void handle_client(int client_socket) {
+void handle_client(int client_socket, bool* shutdown_flag) {
     int done = 0;
     int length = 0;
 
@@ -91,7 +91,7 @@ void handle_client(int client_socket) {
             //    Corresponding database operator is executed over the query
             char* response = NULL;
             if (query) {
-                response = execute_db_operator(query);
+                response = execute_db_operator(query, shutdown_flag);
                 if (response) {
                     send_message.length = strlen(response);
                     char send_buffer[send_message.length + 1];
@@ -220,15 +220,19 @@ int main(void) {
     socklen_t t = sizeof(remote);
     int client_socket = 0;
 
+    bool shutdown = false;
     while (true) {
         if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
             log_err("L%d: Failed to accept a new connection.\n", __LINE__);
             exit(1);
         }
-        handle_client(client_socket);
+
+        handle_client(client_socket, &shutdown);
         
-        if (current_db == NULL) {
-            break;
+        if (shutdown == true) {
+            if (db_shutdown().code != OK) {
+                log_err("Failed to shutdown database\n");
+            }
         }
     }
     return 0;
