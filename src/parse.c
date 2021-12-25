@@ -353,50 +353,86 @@ DbOperator* parse_load(char* load_arguments, message* send_message) {
  * parse_select
  **/
 
-DbOperator* parse_select(char* select_arguments, message* send_message, GeneralizedColumnHandle* handle) {
+DbOperator* parse_select(char* select_arguments, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
     if (strncmp(select_arguments, "(", 1) == 0) {
         select_arguments++;
         char** select_arguments_index = &select_arguments;
-        char* column_name = next_token(select_arguments_index, &send_message->status);
-        char* lower_bound = next_token(select_arguments_index, &send_message->status);
-        char* upper_bound = next_token(select_arguments_index, &send_message->status);
+        char* arg1 = next_token(select_arguments_index, &send_message->status);
+        char* arg2 = next_token(select_arguments_index, &send_message->status);
+        char* arg3 = next_token(select_arguments_index, &send_message->status);
+        char* arg4 = next_token(select_arguments_index, &send_message->status);
 
-        // Incorrect number of arguments
-        if (send_message->status == INCORRECT_FORMAT) {
-            log_err("Incorrect number of arguments\n");
-            return NULL;
+        if (arg4 == NULL) {
+            // Lookup the column
+            Column* column = lookup_column(arg1);
+            if (column == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+
+            // Read and chop off last char, which should be a ')'
+            int last_char = strlen(arg3) - 1;
+            if (arg3[last_char] != ')') {
+                log_err("Missing ')' in query\n");
+                send_message->status = INCORRECT_FORMAT;
+                return NULL;
+            }
+
+            // Replace the ')' with a null terminating character
+            arg3[last_char] = '\0';
+
+            // Parse the bounds
+            int low = (strcmp(arg2, "null") == 0) ? INT_MIN : atoi(arg2);
+            int high = (strcmp(arg3, "null") == 0) ? INT_MAX : atoi(arg3);
+
+            // Make select dbo
+            DbOperator* dbo = malloc(sizeof(DbOperator));
+            dbo->type = SELECT;
+            dbo->operator_fields.select_operator.column = column;
+            dbo->operator_fields.select_operator.indexes = NULL;
+            dbo->operator_fields.select_operator.values = NULL;
+            dbo->operator_fields.select_operator.comparator.p_low = low;
+            dbo->operator_fields.select_operator.comparator.p_high = high;
+            dbo->operator_fields.select_operator.comparator.type1 = GREATER_THAN_OR_EQUAL;
+            dbo->operator_fields.select_operator.comparator.type2 = LESS_THAN;
+            dbo->operator_fields.select_operator.handle = handle;
+            return dbo;
+        } else {
+            GeneralizedColumnHandle* indexes_handle = lookup_handle(context, arg1);
+            if (indexes_handle == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+
+            GeneralizedColumnHandle* values_handle = lookup_handle(context, arg2);
+            if (values_handle == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+
+            int last_char = strlen(arg4) - 1;
+            if (arg4[last_char] != ')') {
+                log_err("Missing ')' in query\n");
+                send_message->status = INCORRECT_FORMAT;
+                return NULL;
+            }
+            arg4[last_char] = '\0';
+
+            int low = (strcmp(arg3, "null") == 0) ? INT_MIN : atoi(arg3);
+            int high = (strcmp(arg4, "null") == 0) ? INT_MAX : atoi(arg4);
+
+            DbOperator* dbo = malloc(sizeof(DbOperator));
+            dbo->type = SELECT;
+            dbo->operator_fields.select_operator.column = NULL;
+            dbo->operator_fields.select_operator.indexes = indexes_handle->generalized_column.column_pointer.result;
+            dbo->operator_fields.select_operator.values = values_handle->generalized_column.column_pointer.result;
+            dbo->operator_fields.select_operator.comparator.p_low = low;
+            dbo->operator_fields.select_operator.comparator.p_high = high;
+            dbo->operator_fields.select_operator.comparator.type1 = GREATER_THAN_OR_EQUAL;
+            dbo->operator_fields.select_operator.comparator.type2 = LESS_THAN;
+            dbo->operator_fields.select_operator.handle = handle;
+            return dbo;
         }
-
-        // Lookup the column
-        Column* column = lookup_column(column_name);
-        if (column == NULL) {
-            send_message->status = OBJECT_NOT_FOUND;
-            return NULL;
-        }
-
-        // Read and chop off last char, which should be a ')'
-        int last_char = strlen(upper_bound) - 1;
-        if (upper_bound[last_char] != ')') {
-            log_err("Missing ')' in query\n");
-            send_message->status = INCORRECT_FORMAT;
-            return NULL;
-        }
-
-        // Replace the ')' with a null terminating character
-        upper_bound[last_char] = '\0';
-
-        // Parse the bounds
-        int lower = (strcmp(lower_bound, "null") == 0) ? INT_MIN : atoi(lower_bound);
-        int upper = (strcmp(upper_bound, "null") == 0) ? INT_MAX : atoi(upper_bound);
-
-        // Make create dbo for table
-        DbOperator* dbo = malloc(sizeof(DbOperator));
-        dbo->type = SELECT;
-        dbo->operator_fields.select_operator.column = column;
-        dbo->operator_fields.select_operator.lower = lower;
-        dbo->operator_fields.select_operator.upper = upper;
-        dbo->operator_fields.select_operator.handle = handle;
-        return dbo;
     } else {
         log_err("Missing '(' in query\n");
         send_message->status = INCORRECT_FORMAT;
@@ -414,7 +450,7 @@ DbOperator* parse_fetch(char* fetch_arguments, message* send_message, ClientCont
         fetch_arguments++;
         char** fetch_arguments_index = &fetch_arguments;
         char* column_name = next_token(fetch_arguments_index, &send_message->status);
-        char* positions_handle_name = next_token(fetch_arguments_index, &send_message->status);
+        char* indexes_handle_name = next_token(fetch_arguments_index, &send_message->status);
 
         // Incorrect number of arguments
         if (send_message->status == INCORRECT_FORMAT) {
@@ -430,24 +466,24 @@ DbOperator* parse_fetch(char* fetch_arguments, message* send_message, ClientCont
         }
 
         // Read and chop off last char, which should be a ')'
-        int last_char = strlen(positions_handle_name) - 1;
-        if (positions_handle_name[last_char] != ')') {
+        int last_char = strlen(indexes_handle_name) - 1;
+        if (indexes_handle_name[last_char] != ')') {
             log_err("Missing ')' in query\n");
             send_message->status = INCORRECT_FORMAT;
             return NULL;
         }
 
         // Replace the ')' with a null terminating character
-        positions_handle_name[last_char] = '\0';
+        indexes_handle_name[last_char] = '\0';
 
         // Lookup the handle
-        GeneralizedColumnHandle* positions_handle = lookup_handle(context, positions_handle_name);
+        GeneralizedColumnHandle* indexes_handle = lookup_handle(context, indexes_handle_name);
 
         // Make create dbo for table
         DbOperator* dbo = malloc(sizeof(DbOperator));
         dbo->type = FETCH;
         dbo->operator_fields.fetch_operator.column = column;
-        dbo->operator_fields.fetch_operator.positions = positions_handle->generalized_column.column_pointer.result;
+        dbo->operator_fields.fetch_operator.indexes = indexes_handle->generalized_column.column_pointer.result;
         dbo->operator_fields.fetch_operator.handle = handle;
         return dbo;
     } else {
@@ -459,45 +495,33 @@ DbOperator* parse_fetch(char* fetch_arguments, message* send_message, ClientCont
 
 
 DbOperator* parse_print(char* print_arguments, message* send_message, ClientContext* context) {
-    if (strncmp(print_arguments, "(", 1) == 0) {
-        print_arguments++;
-        char* token = strsep(&print_arguments, ",");
+    print_arguments = trim_parenthesis(print_arguments);
 
-        // Too few arguments
-        if (token == NULL) {
-            log_err("Incorrect number of arguments\n");
-            send_message->status = INCORRECT_FORMAT;
-            return NULL;
+    int handles = 1;
+    for (size_t i = 0; i < strlen(print_arguments); i++) {
+        if (print_arguments[i] == ',') {
+            handles++;
         }
-
-        // Get the handle name free of quotation marks
-        char* handle_name = token;
-        handle_name = trim_quotes(handle_name);
-
-        // Read and chop off last char, which should be a ')'
-        int last_char = strlen(handle_name) - 1;
-        if (handle_name[last_char] != ')') {
-            log_err("Missing ')' in query\n");
-            send_message->status = INCORRECT_FORMAT;
-            return NULL;
-        }
-
-        // Replace the ')' with a null terminating character
-        handle_name[last_char] = '\0';
-
-        // Lookup the handle name
-        GeneralizedColumnHandle* handle = lookup_handle(context, handle_name);
-
-        // Make print operator
-        DbOperator* dbo = malloc(sizeof(DbOperator));
-        dbo->type = PRINT;
-        dbo->operator_fields.print_operator.result = handle->generalized_column.column_pointer.result;
-        return dbo;
-    } else {
-        log_err("Missing '(' in query\n");
-        send_message->status = INCORRECT_FORMAT;
-        return NULL;
     }
+
+    Result** results = malloc(handles * sizeof(Result*));
+    char* handle_name = NULL;
+    int num_results = 0;
+    while ((handle_name = strsep(&print_arguments, ",")) != NULL) {
+        GeneralizedColumnHandle* handle = lookup_handle(context, handle_name);
+        if (handle == NULL) {
+            send_message->status = OBJECT_NOT_FOUND;
+            return NULL;
+        }
+        results[num_results] = handle->generalized_column.column_pointer.result;
+        num_results++;
+    }
+
+    DbOperator* dbo = malloc(sizeof(DbOperator));
+    dbo->type = PRINT;
+    dbo->operator_fields.print_operator.results = results;
+    dbo->operator_fields.print_operator.num_results = num_results;
+    return dbo;
 }
 
 DbOperator* parse_arithmetic(char* add_subtract_arguments, ArithmeticType type, message* send_message, ClientContext* context, GeneralizedColumnHandle* handle) {
@@ -614,7 +638,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         dbo = parse_load(query_command, send_message);
     } else if (strncmp(query_command, "select", 6) == 0) {
         query_command += 6;
-        dbo = parse_select(query_command, send_message, handle);
+        dbo = parse_select(query_command, send_message, context, handle);
     } else if (strncmp(query_command, "fetch", 5) == 0) {
         query_command += 5;
         dbo = parse_fetch(query_command, send_message, context, handle);
@@ -650,7 +674,6 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
 
     // TODO: delete this later
     if (dbo == NULL) {
-        send_message->status = QUERY_UNSUPPORTED;
         return dbo;
     }
 

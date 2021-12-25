@@ -192,10 +192,10 @@ typedef struct ClientContext {
 typedef struct Comparator {
     long int p_low; // used in equality and ranges.
     long int p_high; // used in range compares.
-    GeneralizedColumn* gen_col;
+    // GeneralizedColumn* gen_col;
     ComparatorType type1;
     ComparatorType type2;
-    char* handle;
+    // char* handle;
 } Comparator;
 
 /*
@@ -263,19 +263,21 @@ typedef struct LoadOperator {
 
 typedef struct SelectOperator {
     Column* column;
+    Result* indexes;
+    Result* values;
+    Comparator comparator;
     GeneralizedColumnHandle* handle;
-    int lower;
-    int upper;
 } SelectOperator;
 
 typedef struct FetchOperator {
     Column* column;
-    Result* positions;
+    Result* indexes;
     GeneralizedColumnHandle* handle;
 } FetchOperator;
 
 typedef struct PrintOperator {
-    Result* result;
+    Result** results;
+    int num_results;
 } PrintOperator;
 
 typedef struct ArithmeticOperator {
@@ -334,11 +336,11 @@ Column* create_column(Table* table, char* name, int sorted, Status* ret_status);
 
 Status relational_insert(Table* table, int* values);
 
-Result* select_column(Column* column, int lower, int upper, Status* ret_status);
+Result* select_column(SelectOperator select_operator, Status* ret_status);
 
-Result* fetch(Column* column, Result* positions, Status* ret_status);
+Result* fetch(Column* column, Result* indexes, Status* ret_status);
 
-char* print_result(Result* result, Status* ret_status);
+char* print_result(PrintOperator print_operator, Status* ret_status);
 
 Result* add_values(Result* first, Result* second, Status* ret_status);
 

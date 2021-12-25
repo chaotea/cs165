@@ -137,27 +137,45 @@ Status relational_insert(Table* table, int* values) {
 }
 
 
-Result* select_column(Column* column, int lower, int upper, Status* ret_status) {
+Result* select_column(SelectOperator select_operator, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 0;
 	result->capacity = DEFAULT_COL_SIZE;
 	result->data_type = INDEX;
 	size_t* indexes = calloc(DEFAULT_COL_SIZE, sizeof(size_t));
 
-	bool no_lower = (lower == 0) ? true : false;
-	bool no_upper = (upper == 0) ? true : false;
+	bool no_low = (select_operator.comparator.p_low == 0) ? true : false;
+	bool no_high = (select_operator.comparator.p_high == 0) ? true : false;
 
-	for (size_t i = 0; i < column->length; i++) {
-		if (
-			(no_lower || column->data[i] >= lower) &&
-			(no_upper || column->data[i] < upper)
-		) {
-			if (result->num_tuples == result->capacity) {
-				result->capacity = result->capacity * 2;
-				indexes = realloc(indexes, result->capacity * sizeof(size_t));
+	if (select_operator.indexes == NULL) {
+		for (size_t i = 0; i < select_operator.column->length; i++) {
+			if (
+				(no_low || select_operator.column->data[i] >= select_operator.comparator.p_low) &&
+				(no_high || select_operator.column->data[i] < select_operator.comparator.p_high)
+			) {
+				if (result->num_tuples == result->capacity) {
+					result->capacity = result->capacity * 2;
+					indexes = realloc(indexes, result->capacity * sizeof(size_t));
+				}
+				indexes[result->num_tuples] = i;
+				result->num_tuples++;
 			}
-			indexes[result->num_tuples] = i;
-			result->num_tuples++;
+		}
+	} else {
+		for (size_t i = 0; i < select_operator.indexes->num_tuples; i++) {
+			size_t index = *((size_t*) select_operator.indexes->payload + i);
+			int element = *((int*) select_operator.values->payload + i);
+			if (
+				(no_low || element >= select_operator.comparator.p_low) &&
+				(no_high || element < select_operator.comparator.p_high)
+			) {
+				if (result->num_tuples == result->capacity) {
+					result->capacity = result->capacity * 2;
+					indexes = realloc(indexes, result->capacity * sizeof(size_t));
+				}
+				indexes[result->num_tuples] = index;
+				result->num_tuples++;
+			}
 		}
 	}
 
@@ -166,15 +184,15 @@ Result* select_column(Column* column, int lower, int upper, Status* ret_status) 
 	return result;
 }
 
-Result* fetch(Column* column, Result* positions, Status* ret_status) {
+Result* fetch(Column* column, Result* indexes, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
-	result->num_tuples = positions->num_tuples;
-	result->capacity = positions->num_tuples;
+	result->num_tuples = indexes->num_tuples;
+	result->capacity = indexes->num_tuples;
 	result->data_type = INT;
 
-	int* values = calloc(positions->num_tuples, sizeof(int));
-	for (size_t i = 0; i < positions->num_tuples; i++) {
-		size_t index = *((size_t*) positions->payload + i);
+	int* values = calloc(indexes->num_tuples, sizeof(int));
+	for (size_t i = 0; i < indexes->num_tuples; i++) {
+		size_t index = *((size_t*) indexes->payload + i);
 		values[i] = column->data[index];
 	}
 
@@ -184,56 +202,48 @@ Result* fetch(Column* column, Result* positions, Status* ret_status) {
 }
 
 
-char* print_result(Result* result, Status* ret_status) {
+char* print_result(PrintOperator print_operator, Status* ret_status) {
+	char row[BUF_SIZE];
 	size_t len = 0;
-	char tuple[128];
-	char* response;
+	Result* result = NULL;
 
 	// TODO: send an array of ints instead of chars
 
-	if (result->data_type == INT) {
-		for (size_t i = 0; i < result->num_tuples; i++) {
-			len += sprintf(tuple, "%d", *((int*) result->payload + i)) + 1;
+	for (size_t i = 0; i < print_operator.results[0]->num_tuples; i++) {
+		for (int r = 0; r < print_operator.num_results; r++) {
+			result = print_operator.results[r];
+			if (result->data_type == INT) {
+				len += sprintf(row, "%d", *((int*) result->payload + i)) + 1;
+			} else if (result->data_type == LONG) {
+				len += sprintf(row, "%ld", *((long int*) result->payload + i)) + 1;
+			} else if (result->data_type == FLOAT) {
+				len += sprintf(row, "%.2f", *((float*) result->payload + i)) + 1;
+			}
 		}
-
-		response = malloc((len + 1) * sizeof(char));
-		memset(response, 0, len + 1);
-
-		for (size_t j = 0; j < result->num_tuples; j++) {
-			sprintf(response, "%s%d\n", response, *((int*) result->payload + j));
-		}
-
-		response[len] = '\0';
-
-	} else if (result->data_type == LONG) {
-		for (size_t i = 0; i < result->num_tuples; i++) {
-			len += sprintf(tuple, "%ld", *((long int*) result->payload + i)) + 1;
-		}
-
-		response = malloc((len + 1) * sizeof(char));
-		memset(response, 0, len + 1);
-
-		for (size_t j = 0; j < result->num_tuples; j++) {
-			sprintf(response, "%s%ld\n", response, *((long int*) result->payload + j));
-		}
-
-		response[len] = '\0';
-		
-	} else if (result->data_type == FLOAT) {
-		for (size_t i = 0; i < result->num_tuples; i++) {
-			len += sprintf(tuple, "%.2f", *((float*) result->payload + i)) + 1;
-		}
-
-		response = malloc((len + 1) * sizeof(char));
-		memset(response, 0, len + 1);
-
-		for (size_t j = 0; j < result->num_tuples; j++) {
-			sprintf(response, "%s%.2f\n", response, *((float*) result->payload + j));
-		}
-
-		response[len] = '\0';
 	}
 
+	char* response = malloc((len + 1) * sizeof(char));
+	memset(response, 0, len + 1);
+	char sep = ',';
+
+	for (size_t j = 0; j < print_operator.results[0]->num_tuples; j++) {
+		for (int r = 0; r < print_operator.num_results; r++) {
+			result = print_operator.results[r];
+			sep = (r == print_operator.num_results - 1) ? '\n': ',';
+			
+			if (result->data_type == INT) {
+				sprintf(response, "%s%d%c", response, *((int*) result->payload + j), sep);
+			} else if (result->data_type == LONG) {
+				sprintf(response, "%s%ld%c", response, *((long int*) result->payload + j), sep);
+			} else if (result->data_type == FLOAT) {
+				sprintf(response, "%s%.2f%c", response, *((float*) result->payload + j), sep);
+			}
+		}
+	}
+
+	response[len] = '\0';
+
+	free(print_operator.results);
 	ret_status->code = OK;
 	return response;
 }
@@ -843,10 +853,7 @@ char* execute_db_operator(DbOperator* query) {
         	log_test("Insert succeeded\n");
 		}
     } else if (query->type == SELECT) {
-        Result* indexes = select_column(query->operator_fields.select_operator.column,
-            query->operator_fields.select_operator.lower,
-            query->operator_fields.select_operator.upper,
-            &status);
+        Result* indexes = select_column(query->operator_fields.select_operator, &status);
         if (status.code != OK) {
             log_err("Select failed\n");
         } else {
@@ -856,7 +863,7 @@ char* execute_db_operator(DbOperator* query) {
 		query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
     } else if (query->type == FETCH) {
         Result* result = fetch(query->operator_fields.fetch_operator.column,
-            query->operator_fields.fetch_operator.positions,
+            query->operator_fields.fetch_operator.indexes,
             &status);
         if (status.code != OK) {
             log_err("Fetch failed\n");
@@ -866,7 +873,7 @@ char* execute_db_operator(DbOperator* query) {
         query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
     } else if (query->type == PRINT) {
-        response = print_result(query->operator_fields.print_operator.result, &status);
+        response = print_result(query->operator_fields.print_operator, &status);
         if (status.code != OK) {
             log_err("Print failed\n");
         } else {

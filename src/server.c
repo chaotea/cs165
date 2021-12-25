@@ -110,10 +110,6 @@ void handle_client(int client_socket) {
                 send_message.length = 0;
                 send_message.payload = NULL;
                 log_err("Unknown command\n");
-            } else if (send_message.status == QUERY_UNSUPPORTED) {
-                send_message.length = 0;
-                send_message.payload = NULL;
-                log_err("Query unsupported\n");
             } else {
                 send_message.length = 0;
                 send_message.payload = NULL;
