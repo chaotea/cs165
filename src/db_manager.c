@@ -19,7 +19,7 @@ Db* current_db;
  */
 Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_status) {
 	if (db != current_db) {
-		log_err("Error creating table. Requested db is not the current db.");
+		log_err("Error creating table. Requested db is not the current db.\n");
 		ret_status->code = ERROR;
 		return NULL;
 	}
@@ -66,7 +66,7 @@ Status create_db(const char* db_name) {
 	Status ret_status;
 
 	if (current_db) {
-		log_err("Error creating database. There is already a database currently active.");
+		log_err("Error creating database. There is already a database currently active.\n");
 		ret_status.code = ERROR;
 		return ret_status;
 	}
@@ -89,7 +89,7 @@ Column* create_column(Table* table, char* name, int sorted, Status* ret_status) 
 	(void) sorted;
 
 	if (table->col_idx == table->col_count) {
-		log_err("Error creating column. Table is full. %d", table->col_count);
+		log_err("Error creating column. Table is full\n");
 		ret_status->code = ERROR;
 		return NULL;
 	}
@@ -189,23 +189,19 @@ char* print_result(Result* result, Status* ret_status) {
 	char tuple[128];
 	char* response;
 
+	// TODO: send an array of ints instead of chars
+
 	if (result->data_type == INT) {
 		for (size_t i = 0; i < result->num_tuples; i++) {
 			len += sprintf(tuple, "%d", *((int*) result->payload + i)) + 1;
 		}
 
 		response = malloc((len + 1) * sizeof(char));
+		memset(response, 0, len + 1);
 
 		for (size_t j = 0; j < result->num_tuples; j++) {
 			sprintf(response, "%s%d\n", response, *((int*) result->payload + j));
 		}
-
-		// for (size_t j = 0; j < result->num_tuples; j++) {
-		// 	memcpy(response, result->payload + j, tuple_lens[j]);
-		// 	response += tuple_lens[j];
-		// 	*response = '\n';
-		// 	response++;
-		// }
 
 		response[len] = '\0';
 
@@ -215,6 +211,7 @@ char* print_result(Result* result, Status* ret_status) {
 		}
 
 		response = malloc((len + 1) * sizeof(char));
+		memset(response, 0, len + 1);
 
 		for (size_t j = 0; j < result->num_tuples; j++) {
 			sprintf(response, "%s%ld\n", response, *((long int*) result->payload + j));
@@ -228,6 +225,7 @@ char* print_result(Result* result, Status* ret_status) {
 		}
 
 		response = malloc((len + 1) * sizeof(char));
+		memset(response, 0, len + 1);
 
 		for (size_t j = 0; j < result->num_tuples; j++) {
 			sprintf(response, "%s%.2f\n", response, *((float*) result->payload + j));
@@ -350,6 +348,7 @@ Result* calculate_min(Result* values, Status* ret_status) {
 
 
 // Load database from file
+// TODO: send the file from client to server
 Status load_table(const char* file_name) {
 	Status ret_status;
 
@@ -528,12 +527,17 @@ Status db_startup() {
 				ret_status.code = ERROR;
     			return ret_status;
 			}
-			// column->data = data
+
+			// TODO: set column->data = data
+			// and directly modify memory mapped data
+
 			// Write data from file to column
 			for (size_t i = 0; i < table->table_length; i++) {
 				column->data[i] = data[i];
 			}
 
+			// TODO: sync and unmap in shutdown, not startup
+			
 			// Unmap the file and close the file descriptor
 			if (munmap(data, table->table_length * sizeof(int)) == -1) {
 				close(fd);
@@ -566,7 +570,8 @@ Status db_shutdown() {
 	// Create new directory for database
 	struct stat st;
 	if (stat(MAINDIR, &st) == -1) {
-		mkdir(MAINDIR, 0700);
+		log_test("FOUND\n");
+		mkdir(MAINDIR, 0777);
 	}
 
 	// Construct metadata file
@@ -576,6 +581,7 @@ Status db_shutdown() {
 	fp = fopen(meta_path, "w");
 	if (!fp) {
 		log_err("Unable to create metadata file\n");
+		log_err("Error: %s\n", strerror(errno));
 		ret_status.code = ERROR;
 		return ret_status;
 	}
@@ -693,8 +699,9 @@ char* execute_db_operator(DbOperator* query) {
         if(query->operator_fields.create_operator.create_type == _DB) {
             if (create_db(query->operator_fields.create_operator.name).code != OK) {
                 log_err("Create db failed\n");
-            }
-            log_test("Create db succeeded\n");
+            } else {
+            	log_test("Create db succeeded\n");
+			}
         } else if (query->operator_fields.create_operator.create_type == _TABLE) {
             create_table(query->operator_fields.create_operator.db,
                 query->operator_fields.create_operator.name,
@@ -702,8 +709,9 @@ char* execute_db_operator(DbOperator* query) {
                 &status);
             if (status.code != OK) {
                 log_err("Create table failed\n");
-            }
-            log_test("Create table succeeded\n");
+            } else {
+            	log_test("Create table succeeded\n");
+			}
         } else if (query->operator_fields.create_operator.create_type == _COLUMN){
             create_column(query->operator_fields.create_operator.table,
                 query->operator_fields.create_operator.name,
@@ -711,19 +719,22 @@ char* execute_db_operator(DbOperator* query) {
                 &status);
             if (status.code != OK) {
                 log_err("Create column failed\n");
-            }
-            log_test("Create column succeeded\n");
+            } else {
+            	log_test("Create column succeeded\n");
+			}
         }
     } else if (query->type == LOAD) {
         if (load_table(query->operator_fields.load_operator.file_name).code != OK) {
             log_err("Load failed\n");
-        }
-        log_test("Load succeeded\n");
+        } else {
+        	log_test("Load succeeded\n");
+		}
     } else if (query->type == INSERT) {
         if (relational_insert(query->operator_fields.insert_operator.table, query->operator_fields.insert_operator.values).code != OK) {
             log_err("Insert failed\n");
-        }
-        log_test("Insert succeeded\n");
+        } else {
+        	log_test("Insert succeeded\n");
+		}
     } else if (query->type == SELECT) {
         Result* indexes = select_column(query->operator_fields.select_operator.column,
             query->operator_fields.select_operator.lower,
@@ -731,80 +742,90 @@ char* execute_db_operator(DbOperator* query) {
             &status);
         if (status.code != OK) {
             log_err("Select failed\n");
-        }
-        query->operator_fields.select_operator.handle->generalized_column.column_type = RESULT;
-        query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
-        log_test("Select succeeded\n");
+        } else {
+			log_test("Select succeeded\n");
+		}
+		query->operator_fields.select_operator.handle->generalized_column.column_type = RESULT;
+		query->operator_fields.select_operator.handle->generalized_column.column_pointer.result = indexes;
     } else if (query->type == FETCH) {
         Result* result = fetch(query->operator_fields.fetch_operator.column,
             query->operator_fields.fetch_operator.positions,
             &status);
         if (status.code != OK) {
             log_err("Fetch failed\n");
-        }
+        } else {
+			log_test("Fetch succeeded\n");
+		}
         query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
-        log_test("Fetch succeeded\n");
     } else if (query->type == PRINT) {
         response = print_result(query->operator_fields.print_operator.result, &status);
         if (status.code != OK) {
             log_err("Print failed\n");
-        }
-        log_test("Print succeeded\n");
+        } else {
+        	log_test("Print succeeded\n");
+		}
     } else if (query->type == ADD) {
         Result* result = add_values(query->operator_fields.math_operator.first,
             query->operator_fields.math_operator.second,
             &status);
         if (status.code != OK) {
             log_err("Add failed\n");
-        }
+        } else {
+			log_test("Add succeeded\n");
+		}
         query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
-        log_test("Add succeeded\n");
     } else if (query->type == SUBTRACT) {
         Result* result = subtract_values(query->operator_fields.math_operator.first,
             query->operator_fields.math_operator.second,
             &status);
         if (status.code != OK) {
             log_err("Subtract failed\n");
-        }
+        } else {
+			log_test("Subtract succeeded\n");
+		}
         query->operator_fields.math_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.math_operator.handle->generalized_column.column_pointer.result = result;
-        log_test("Subtract succeeded\n");
     } else if (query->type == AGGREGATE) {
         Result* result = NULL;
         if (query->operator_fields.aggregate_operator.aggregate_type == _SUM) {
             result = calculate_sum(query->operator_fields.aggregate_operator.values, &status);
             if (status.code != OK) {
                 log_err("Sum failed\n");
-            }
-            log_test("Sum succeeded\n");
+            } else {
+            	log_test("Sum succeeded\n");
+			}
         } else if (query->operator_fields.aggregate_operator.aggregate_type == _AVG) {
             result = calculate_average(query->operator_fields.aggregate_operator.values, &status);
             if (status.code != OK) {
                 log_err("Average failed\n");
-            }
-            log_test("Average succeeded\n");
+            } else {
+            	log_test("Average succeeded\n");
+			}
         } else if (query->operator_fields.aggregate_operator.aggregate_type == _MAX) {
             result = calculate_max(query->operator_fields.aggregate_operator.values, &status);
             if (status.code != OK) {
                 log_err("Max failed\n");
-            }
-            log_test("Max succeeded\n");
+            } else {
+				log_test("Max succeeded\n");
+			}
         } else if (query->operator_fields.aggregate_operator.aggregate_type == _MIN) {
             result = calculate_min(query->operator_fields.aggregate_operator.values, &status);
             if (status.code != OK) {
                 log_err("Min failed\n");
-            }
-            log_test("Min succeeded\n");
+            } else {
+				log_test("Min succeeded\n");
+			}
         }
         query->operator_fields.aggregate_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.aggregate_operator.handle->generalized_column.column_pointer.result = result;
     } else if (query->type == SHUTDOWN) {
         if (db_shutdown().code != OK) {
             log_err("Shutdown failed\n");
-        }
-        log_test("Shutdown succeeded\n");
+        } else {
+			log_test("Shutdown succeeded\n");
+		}
     } else {
         log_err("Unknown query while executing\n");
     }

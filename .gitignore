@@ -1,8 +1,9 @@
 # Project
-data
-*.data
-student_outputs
+src/data
+staff_test
+test_outputs
 generated_data
+student_outputs
 status.current_container_id
 
 # Mac OS stuff

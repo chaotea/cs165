@@ -97,7 +97,7 @@ void handle_client(int client_socket) {
                     char send_buffer[send_message.length + 1];
                     strcpy(send_buffer, response);
                     send_message.payload = send_buffer;
-                    send_message.status = OK_WAIT_FOR_RESPONSE;
+                    send_message.status = OK_DONE;
                 } else {
                     send_message.length = 0;
                     send_message.payload = NULL;
@@ -120,7 +120,7 @@ void handle_client(int client_socket) {
                 log_err("Error parsing message\n");
             }
 
-            // chunk the response if too big
+            // TODO: chunk the response if it's too big
 
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
             if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
@@ -208,18 +208,18 @@ int setup_server() {
 //      What aspects of siloes or isolation are maintained in your design? (Think `what` is shared between `whom`?)
 
 int main(void) {
-    // Load database from storage
-    struct stat st;
-	if (stat(MAINDIR, &st) != -1) {
-		if (db_startup().code == OK) {
-            log_test("-- Loading database from storage succeeded\n");
-        }
-	}
-
     int server_socket = setup_server();
     if (server_socket < 0) {
         exit(1);
     }
+
+    // Load database from storage
+    struct stat st;
+	if (stat(MAINDIR, &st) != -1) {
+		if (db_startup().code != OK) {
+            log_err("Failed to load database from storage\n");
+        }
+	}
 
     log_info("Waiting for a connection %d ...\n", server_socket);
 
