@@ -119,7 +119,7 @@ Status relational_insert(Table* table, int* values) {
 	if (table->table_length == table->table_capacity) {
 		size_t new_capacity = table->table_capacity * 2;
 		for (size_t i = 0; i < table->col_count; i++) {
-			table->columns[i] = realloc(table->columns[i]->data, new_capacity * sizeof(int));
+			table->columns[i]->data = realloc(table->columns[i]->data, new_capacity * sizeof(int));
 		}
 		table->table_capacity = new_capacity;
 	}
@@ -367,10 +367,7 @@ Status load_table(const char* file_name) {
 	}
 
 	// Get the table name
-    char* header;
-    char* to_free;
-    header = to_free = malloc((strlen(buf)+1) * sizeof(char));
-    strcpy(header, buf);
+    char* header = buf;
     // Separate the db name from table name
     char* db_name = strsep(&header, ".");
 	// If there is no dot
@@ -400,32 +397,26 @@ Status load_table(const char* file_name) {
 		ret_status.code = ERROR;
 		return ret_status;
 	}
-    free(to_free);
 
 	// parse the data
 	while (fgets(buf, BUF_SIZE, fp) != NULL) {
-		char* tokenizer_copy;
-		tokenizer_copy = to_free = malloc((strlen(buf)+1) * sizeof(char));
+		char* line = buf;
 		char* token;
-    	strcpy(tokenizer_copy, buf);
 
 		int* values = malloc(table->col_count * sizeof(int));
 		size_t idx = 0;
 
-		char** insert_index = &tokenizer_copy;
-		while ((token = strsep(insert_index, ",")) != NULL) {
+		while ((token = strsep(&line, ",")) != NULL) {
             int insert_val = atoi(token);
             values[idx] = insert_val;
             idx++;
         }
         // check that we received the correct number of input values
         if (idx != table->col_count) {
-            free(to_free);
 			ret_status.code = ERROR;
 			return ret_status;
         }
 
-		free(to_free);
 		relational_insert(table, values);
 	}
 
@@ -438,6 +429,13 @@ Status load_table(const char* file_name) {
 
 Status db_startup() {
 	Status ret_status;
+
+	// Check if there's a database to load
+    struct stat st;
+	if (stat(MAINDIR, &st) == -1) {
+		ret_status.code = OK;
+		return ret_status;
+	}
 
 	FILE* fp;
 	char meta_path[strlen(MAINDIR) + strlen(METADATA_FILE_NAME) + 2];
@@ -570,7 +568,6 @@ Status db_shutdown() {
 	// Create new directory for database
 	struct stat st;
 	if (stat(MAINDIR, &st) == -1) {
-		log_test("FOUND\n");
 		mkdir(MAINDIR, 0777);
 	}
 
@@ -581,7 +578,6 @@ Status db_shutdown() {
 	fp = fopen(meta_path, "w");
 	if (!fp) {
 		log_err("Unable to create metadata file\n");
-		log_err("Error: %s\n", strerror(errno));
 		ret_status.code = ERROR;
 		return ret_status;
 	}

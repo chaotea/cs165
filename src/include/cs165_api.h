@@ -36,7 +36,7 @@ SOFTWARE.
 #define BUF_SIZE 1024
 #define DEFAULT_COL_SIZE 1024
 
-#define MAINDIR "./data"
+#define MAINDIR "data"
 #define METADATA_FILE_NAME "meta.data"
 
 /**

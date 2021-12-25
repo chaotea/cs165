@@ -214,12 +214,9 @@ int main(void) {
     }
 
     // Load database from storage
-    struct stat st;
-	if (stat(MAINDIR, &st) != -1) {
-		if (db_startup().code != OK) {
-            log_err("Failed to load database from storage\n");
-        }
-	}
+    if (db_startup().code != OK) {
+        log_err("Failed to load database from storage\n");
+    }
 
     log_info("Waiting for a connection %d ...\n", server_socket);
 

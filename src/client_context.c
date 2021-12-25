@@ -57,7 +57,6 @@ Column* lookup_column(char* name) {
             table = current_db->tables[i];
         }
     }
-
     if (!table) {
         return NULL;
     }
