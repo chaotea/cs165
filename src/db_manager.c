@@ -201,6 +201,15 @@ Result* fetch(Column* column, Result* indexes, Status* ret_status) {
 	return result;
 }
 
+void begin_batch(ClientContext* context, Status* ret_status) {
+	(void) context, (void) ret_status;
+	return;
+}
+
+void execute_batch(ClientContext* context, Status* ret_status) {
+	(void) context, (void) ret_status;
+	return;
+}
 
 char* print_result(PrintOperator print_operator, Status* ret_status) {
 	char row[BUF_SIZE];
@@ -872,6 +881,22 @@ char* execute_db_operator(DbOperator* query, bool* shutdown_flag) {
 		}
         query->operator_fields.fetch_operator.handle->generalized_column.column_type = RESULT;
         query->operator_fields.fetch_operator.handle->generalized_column.column_pointer.result = result;
+	} else if (query->type == BATCH) {
+		if (query->operator_fields.batch_operator.batch_type == _BEGIN) {
+			begin_batch(query->operator_fields.batch_operator.context, &status);
+			if (status.code != OK) {
+				log_err("Batch query failed\n");
+			} else {
+				log_test("Batch query succeeded\n");
+			}
+		} else if (query->operator_fields.batch_operator.batch_type == _EXECUTE) {
+			execute_batch(query->operator_fields.batch_operator.context, &status);
+			if (status.code != OK) {
+				log_err("Batch execute failed\n");
+			} else {
+				log_test("Batch execute succeeded\n");
+			}
+		}
     } else if (query->type == PRINT) {
         response = print_result(query->operator_fields.print_operator, &status);
         if (status.code != OK) {

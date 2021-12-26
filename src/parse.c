@@ -494,6 +494,36 @@ DbOperator* parse_fetch(char* fetch_arguments, message* send_message, ClientCont
 }
 
 
+DbOperator* parse_batch_queries(char* batch_arguments, message* send_message, ClientContext* context) {
+    if (strncmp(batch_arguments, "()", 2) != 0) {
+        log_test("Hello\n");
+        send_message->status = INCORRECT_FORMAT;
+        return NULL;
+    }
+
+    DbOperator* dbo = malloc(sizeof(DbOperator));
+    dbo->type = BATCH;
+    dbo->operator_fields.batch_operator.batch_type = _BEGIN;
+    dbo->operator_fields.batch_operator.context = context;
+    return dbo;
+}
+
+
+DbOperator* parse_batch_execute(char* batch_arguments, message* send_message, ClientContext* context) {
+    if (strncmp(batch_arguments, "()", 2) != 0) {
+        log_test("Hello\n");
+        send_message->status = INCORRECT_FORMAT;
+        return NULL;
+    }
+
+    DbOperator* dbo = malloc(sizeof(DbOperator));
+    dbo->type = BATCH;
+    dbo->operator_fields.batch_operator.batch_type = _EXECUTE;
+    dbo->operator_fields.batch_operator.context = context;
+    return dbo;
+}
+
+
 DbOperator* parse_print(char* print_arguments, message* send_message, ClientContext* context) {
     print_arguments = trim_parenthesis(print_arguments);
 
@@ -642,6 +672,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "fetch", 5) == 0) {
         query_command += 5;
         dbo = parse_fetch(query_command, send_message, context, handle);
+    } else if (strncmp(query_command, "batch_queries", 13) == 0) {
+        query_command += 13;
+        dbo = parse_batch_queries(query_command, send_message, context);
+    } else if (strncmp(query_command, "batch_execute", 13) == 0) {
+        query_command += 13;
+        dbo = parse_batch_execute(query_command, send_message, context);
     } else if (strncmp(query_command, "print", 5) == 0) {
         query_command += 5;
         dbo = parse_print(query_command, send_message, context);

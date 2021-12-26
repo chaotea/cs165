@@ -109,7 +109,7 @@ test_run:
 		-v $(BASE_DIR)/test_outputs:/cs165/infra_outputs \
 		-d --rm -t --privileged -i cs165 bash))
 	$(DOCKER_CMD) exec $(DOCKER_CONT_ID) bash /cs165/infra_scripts/prep_build.sh
-	$(DOCKER_CMD) exec $(DOCKER_CONT_ID) bash /cs165/infra_scripts/test_milestone.sh 1 1
+	$(DOCKER_CMD) exec $(DOCKER_CONT_ID) bash /cs165/infra_scripts/test_milestone.sh 2 1
 	$(DOCKER_CMD) stop $(DOCKER_CONT_ID)
 
 test_clean:

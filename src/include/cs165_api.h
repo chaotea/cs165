@@ -207,6 +207,7 @@ typedef enum OperatorType {
     LOAD,
     SELECT,
     FETCH,
+    BATCH,
     PRINT,
     ARITHMETIC,
     AGGREGATE,
@@ -230,6 +231,11 @@ typedef enum CreateType {
     _TABLE,
     _COLUMN,
 } CreateType;
+
+typedef enum BatchType {
+    _BEGIN,
+    _EXECUTE
+} BatchType;
 
 /*
  * necessary fields for creation
@@ -275,6 +281,11 @@ typedef struct FetchOperator {
     GeneralizedColumnHandle* handle;
 } FetchOperator;
 
+typedef struct BatchOperator {
+    BatchType batch_type;
+    ClientContext* context;
+} BatchOperator;
+
 typedef struct PrintOperator {
     Result** results;
     int num_results;
@@ -302,6 +313,7 @@ typedef union OperatorFields {
     LoadOperator load_operator;
     SelectOperator select_operator;
     FetchOperator fetch_operator;
+    BatchOperator batch_operator;
     PrintOperator print_operator;
     ArithmeticOperator arithmetic_operator;
     AggregateOperator aggregate_operator;
@@ -339,6 +351,10 @@ Status relational_insert(Table* table, int* values);
 Result* select_column(SelectOperator select_operator, Status* ret_status);
 
 Result* fetch(Column* column, Result* indexes, Status* ret_status);
+
+void begin_batch(ClientContext* context, Status* ret_status);
+
+void execute_batch(ClientContext* context, Status* ret_status);
 
 char* print_result(PrintOperator print_operator, Status* ret_status);
 
