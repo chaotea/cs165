@@ -30,11 +30,11 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_st
 		if (db->tables_capacity == 0) {
 			// If the original capacity is 0, calloc 1 table
 			new_capacity = 1;
-			db->tables = calloc(new_capacity, sizeof(Table));
+			db->tables = calloc(new_capacity, sizeof(Table*));
 		} else {
 			// Otherwise, double the capacity and realloc
 			new_capacity = db->tables_capacity * 2;
-			db->tables = realloc(db->tables, new_capacity * sizeof(Table));
+			db->tables = realloc(db->tables, new_capacity * sizeof(Table*));
 		}
 		db->tables_capacity = new_capacity;
 	}
@@ -48,7 +48,7 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status* ret_st
 	// Initialize the table fields
 	strcpy(table->name, name);
 	// table->name[strlen(name)] = '\0';
-	table->columns = calloc(num_columns, sizeof(Column));
+	table->columns = calloc(num_columns, sizeof(Column*));
 	table->col_count = num_columns;
 	table->col_idx = 0;
 	table->table_length = 0;
@@ -147,50 +147,71 @@ Status relational_insert(Table* table, int* values) {
 }
 
 
-Result* select_column(SelectOperator select_operator, Status* ret_status) {
+Result* select_column(SelectOperator select_operator, ClientContext* context, Status* ret_status) {
 	Result* result = malloc(sizeof(Result));
 	result->num_tuples = 0;
 	result->capacity = DEFAULT_COL_SIZE;
 	result->data_type = INDEX;
-	size_t* indexes = calloc(DEFAULT_COL_SIZE, sizeof(size_t));
+	result->payload = NULL;
 
-	bool no_low = (select_operator.comparator.p_low == 0) ? true : false;
-	bool no_high = (select_operator.comparator.p_high == 0) ? true : false;
+	if (context->batch == NULL) {
+		size_t* indexes = calloc(DEFAULT_COL_SIZE, sizeof(size_t));
 
-	if (select_operator.indexes == NULL) {
-		for (size_t i = 0; i < select_operator.column->length; i++) {
-			if (
-				(no_low || select_operator.column->data[i] >= select_operator.comparator.p_low) &&
-				(no_high || select_operator.column->data[i] < select_operator.comparator.p_high)
-			) {
-				if (result->num_tuples == result->capacity) {
-					result->capacity = result->capacity * 2;
-					indexes = realloc(indexes, result->capacity * sizeof(size_t));
+		if (select_operator.indexes == NULL) {
+			for (size_t i = 0; i < select_operator.column->length; i++) {
+				if (
+					(select_operator.column->data[i] >= select_operator.comparator.p_low) &&
+					(select_operator.column->data[i] < select_operator.comparator.p_high)
+				) {
+					if (result->num_tuples == result->capacity) {
+						result->capacity = result->capacity * 2;
+						indexes = realloc(indexes, result->capacity * sizeof(size_t));
+					}
+					indexes[result->num_tuples] = i;
+					result->num_tuples++;
 				}
-				indexes[result->num_tuples] = i;
-				result->num_tuples++;
+			}
+		} else {
+			for (size_t i = 0; i < select_operator.indexes->num_tuples; i++) {
+				size_t index = *((size_t*) select_operator.indexes->payload + i);
+				int element = *((int*) select_operator.values->payload + i);
+				if (
+					(element >= select_operator.comparator.p_low) &&
+					(element < select_operator.comparator.p_high)
+				) {
+					if (result->num_tuples == result->capacity) {
+						result->capacity = result->capacity * 2;
+						indexes = realloc(indexes, result->capacity * sizeof(size_t));
+					}
+					indexes[result->num_tuples] = index;
+					result->num_tuples++;
+				}
 			}
 		}
+		
+		result->payload = indexes;
 	} else {
-		for (size_t i = 0; i < select_operator.indexes->num_tuples; i++) {
-			size_t index = *((size_t*) select_operator.indexes->payload + i);
-			int element = *((int*) select_operator.values->payload + i);
-			if (
-				(no_low || element >= select_operator.comparator.p_low) &&
-				(no_high || element < select_operator.comparator.p_high)
-			) {
-				if (result->num_tuples == result->capacity) {
-					result->capacity = result->capacity * 2;
-					indexes = realloc(indexes, result->capacity * sizeof(size_t));
-				}
-				indexes[result->num_tuples] = index;
-				result->num_tuples++;
-			}
+		if (context->batch->column == NULL) {
+			context->batch->column = select_operator.column;
 		}
+
+		if (context->batch->batch_size == context->batch->batch_capacity) {
+			int new_capacity = context->batch->batch_capacity * 2;
+			context->batch->results = realloc(context->batch->results, new_capacity * sizeof(Result*));
+			context->batch->lower_bounds = realloc(context->batch->lower_bounds, new_capacity * sizeof(long int*));
+			context->batch->upper_bounds = realloc(context->batch->upper_bounds, new_capacity * sizeof(long int*));
+			context->batch->batch_capacity = new_capacity;
+		}
+
+		context->batch->results[context->batch->batch_size] = result;
+		context->batch->lower_bounds[context->batch->batch_size] = select_operator.comparator.p_low;
+		context->batch->upper_bounds[context->batch->batch_size] = select_operator.comparator.p_high;
+		context->batch->batch_size++;
+
+		log_test("Batched "); // "... Select succeeded"
 	}
 
 	ret_status->code = OK;
-	result->payload = indexes;
 	return result;
 }
 
@@ -212,12 +233,72 @@ Result* fetch(Column* column, Result* indexes, Status* ret_status) {
 }
 
 void begin_batch(ClientContext* context, Status* ret_status) {
-	(void) context, (void) ret_status;
+	if (context->batch != NULL) {
+		log_err("There is already a batched query in progress\n");
+		ret_status->code = ERROR;
+		return;
+	}
+
+	context->batch = malloc(sizeof(SharedSelect));
+	context->batch->column = NULL;
+	context->batch->results = calloc(DEFAULT_BATCH_SIZE, sizeof(Result*));
+	context->batch->lower_bounds = calloc(DEFAULT_BATCH_SIZE, sizeof(long int*));
+	context->batch->upper_bounds = calloc(DEFAULT_BATCH_SIZE, sizeof(long int*));
+	context->batch->batch_size = 0;
+	context->batch->batch_capacity = DEFAULT_BATCH_SIZE;
+
+	ret_status->code = OK;
 	return;
 }
 
 void execute_batch(ClientContext* context, Status* ret_status) {
-	(void) context, (void) ret_status;
+	if (context->batch == NULL) {
+		log_err("There is no batched query currently in progress\n");
+		ret_status->code = ERROR;
+		return;
+	}
+
+	SharedSelect* batch = context->batch;
+	Column* column = batch->column;
+
+	// Initialize an array of indexes for the batched query
+	size_t* indexes[batch->batch_size];
+	for (int q = 0; q < batch->batch_size; q++) {
+		indexes[q] = calloc(DEFAULT_COL_SIZE, sizeof(size_t));
+	}
+
+	// Execute the batched query
+	for (size_t i = 0; i < column->length; i++) {
+		for (int q = 0; q < batch->batch_size; q++) {
+			if (
+				(column->data[i] >= batch->lower_bounds[q]) &&
+				(column->data[i] < batch->upper_bounds[q])
+			) {
+				if (batch->results[q]->num_tuples == batch->results[q]->capacity) {
+					size_t new_capacity = batch->results[q]->capacity * 2;
+					indexes[q] = realloc(indexes[q], new_capacity * sizeof(size_t));
+					batch->results[q]->capacity = new_capacity;
+				}
+				size_t result_index = batch->results[q]->num_tuples;
+				indexes[q][result_index] = i;
+				batch->results[q]->num_tuples++;
+			}
+		}
+	}
+
+	// Pass the payloads off to the respective results
+	for (int q = 0; q < batch->batch_size; q++) {
+		batch->results[q]->payload = indexes[q];
+	}
+
+	// Free the batched query and set the context batch to null
+	free(batch->results);
+	free(batch->lower_bounds);
+	free(batch->upper_bounds);
+	free(batch);
+	context->batch = NULL;
+
+	ret_status->code = OK;
 	return;
 }
 
@@ -872,7 +953,7 @@ char* execute_db_operator(DbOperator* query, bool* shutdown_flag) {
         	log_test("Insert succeeded\n");
 		}
     } else if (query->type == SELECT) {
-        Result* indexes = select_column(query->operator_fields.select_operator, &status);
+        Result* indexes = select_column(query->operator_fields.select_operator, query->context, &status);
         if (status.code != OK) {
             log_err("Select failed\n");
         } else {
@@ -895,16 +976,16 @@ char* execute_db_operator(DbOperator* query, bool* shutdown_flag) {
 		if (query->operator_fields.batch_operator.batch_type == _BEGIN) {
 			begin_batch(query->operator_fields.batch_operator.context, &status);
 			if (status.code != OK) {
-				log_err("Batch query failed\n");
+				log_err("Begin batch query failed\n");
 			} else {
-				log_test("Batch query succeeded\n");
+				log_test("Begin batch query succeeded\n");
 			}
 		} else if (query->operator_fields.batch_operator.batch_type == _EXECUTE) {
 			execute_batch(query->operator_fields.batch_operator.context, &status);
 			if (status.code != OK) {
-				log_err("Batch execute failed\n");
+				log_err("Execute batch query failed\n");
 			} else {
-				log_test("Batch execute succeeded\n");
+				log_test("Execute batch query succeeded\n");
 			}
 		}
     } else if (query->type == PRINT) {

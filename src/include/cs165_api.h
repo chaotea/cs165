@@ -35,6 +35,7 @@ SOFTWARE.
 #define HANDLE_MAX_SIZE 64
 #define BUF_SIZE 1024
 #define DEFAULT_COL_SIZE 1024
+#define DEFAULT_BATCH_SIZE 32
 
 #define MAINDIR "data"
 #define METADATA_FILE_NAME "meta.data"
@@ -176,6 +177,16 @@ typedef struct GeneralizedColumnHandle {
     char name[HANDLE_MAX_SIZE];
     GeneralizedColumn generalized_column;
 } GeneralizedColumnHandle;
+
+typedef struct SharedSelect {
+    Column* column;
+    Result** results;
+    long int* lower_bounds;
+    long int* upper_bounds;
+    int batch_size;
+    int batch_capacity;
+} SharedSelect;
+
 /*
  * holds the information necessary to refer to generalized columns (results or columns)
  */
@@ -183,6 +194,7 @@ typedef struct ClientContext {
     GeneralizedColumnHandle* chandle_table;
     int chandles_in_use;
     int chandle_slots;
+    SharedSelect* batch;
 } ClientContext;
 
 /**
@@ -348,7 +360,7 @@ Column* create_column(Table* table, char* name, int sorted, Status* ret_status);
 
 Status relational_insert(Table* table, int* values);
 
-Result* select_column(SelectOperator select_operator, Status* ret_status);
+Result* select_column(SelectOperator select_operator, ClientContext* context, Status* ret_status);
 
 Result* fetch(Column* column, Result* indexes, Status* ret_status);
 

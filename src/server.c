@@ -62,6 +62,7 @@ void handle_client(int client_socket, bool* shutdown_flag) {
     client_context->chandle_table = calloc(DEFAULT_CONTEXT_HANDLES, sizeof(GeneralizedColumnHandle));
     client_context->chandle_slots = DEFAULT_CONTEXT_HANDLES;
     client_context->chandles_in_use = 0;
+    client_context->batch = NULL;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
